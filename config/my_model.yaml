@@ -1,6 +1,6 @@
 # config/my_model.yaml
 lm_type: "meta-llama/Llama-3.2-1B-Instruct" #"Qwen/Qwen3-4B" # change llama to qwen3
-retrieval_type: "bert"
+retrieval_type: "bm25"
 test_dataset_name: "talkpl-ai/TalkPlayData-Challenge-Dataset"
 item_db_name: "talkpl-ai/TalkPlayData-Challenge-Track-Metadata"
 user_db_name: "talkpl-ai/TalkPlayData-Challenge-User-Metadata"
@@ -12,6 +12,7 @@ corpus_types: # What info is used for retrieval
   - "track_name"
   - "artist_name"
   - "album_name"
+  - "tag_list"
   - "release_date"
 cache_dir: "./cache"
 device: "cpu" #"cuda"
