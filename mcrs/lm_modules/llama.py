@@ -34,7 +34,7 @@ class LLAMA_MODEL:
         generated_text = self.tokenizer.batch_decode(outputs[:,input_ids.shape[1]:], skip_special_tokens=True)[0]
         return generated_text
 
-    def batch_response_generation(self, sys_prompts: list[str], chat_histories: list[list], recommend_items: list[str], max_new_tokens=64):
+    def batch_response_generation(self, sys_prompts: list[str], chat_histories: list[list], recommend_items: list[str], max_new_tokens=128):
         """Generate responses for multiple inputs in batch.
 
         Args:

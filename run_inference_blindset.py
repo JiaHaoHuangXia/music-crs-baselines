@@ -1,17 +1,17 @@
 """
 Batch inference script for Music CRS.
 """
-
 import os
 import json
-import torch
+from datasets import load_dataset
 import argparse
 from mcrs import load_crs_baseline
-from datasets import load_dataset
+import torch
 from tqdm import tqdm
 from typing import List, Dict, Any, Tuple
 import pandas as pd
 from omegaconf import OmegaConf
+import shutil
 
 def chat_history_parser(conversations, music_crs, target_turn_number):
     """
@@ -68,7 +68,10 @@ def main(args):
         - Saves comprehensive results for evaluation
     """
     print("Removing cache directory for preventing memory issues...")
-    os.system("rm -rf cache")
+    #os.system("rm -rf cache")
+    bert_cache = os.path.join("cache", "bert")
+    if os.path.exists(bert_cache):
+        shutil.rmtree(bert_cache)
     config = OmegaConf.load(f"config/{args.tid}.yaml")
     music_crs = load_crs_baseline(
         lm_type=config.lm_type,
@@ -81,26 +84,56 @@ def main(args):
         cache_dir=config.cache_dir,
         device=config.device,
         attn_implementation=config.attn_implementation,
-        dtype=torch.bfloat16
+        dtype=torch.bfloat16,
+        # Gemini query expansion
+        use_gemini_expansion=config.get("use_gemini_expansion", False),
+        gemini_model_name=config.get("gemini_model_name", "gemini-3.1-flash-lite"),
+        gemini_cache_dir=config.get("gemini_cache_dir", "./cache/gemini_expansions"),
     )
     db = load_dataset(config.test_dataset_name, split="test")
     # Prepare all batch data at once
     batch_data, metadata = [], []
-    for item in db:
+    #for item in db:
+    for idx, item in enumerate(db):
+        #if idx > 0:   # only first conversation
+            #break
         user_id = item['user_id']
         session_id = item['session_id']
-        chat_history = item['conversations'][:-1]
-        user_query = item['conversations'][-1]['content']
-        turn_number = item['conversations'][-1]['turn_number']
+        #chat_history = item['conversations'][:-1]
+        #user_query = item['conversations'][-1]['content']
+        #turn_number = item['conversations'][-1]['turn_number']
+        turn_numbers = sorted(set(
+            msg["turn_number"]
+            for msg in item["conversations"]
+            if msg["role"] == "user"
+        ))
+
+        target_turn_number = turn_numbers[-1]
+
+        #for target_turn_number in turn_numbers[:1]:  # only 1 Gemini call
+            #chat_history, user_query = chat_history_parser(
+            #    item["conversations"],
+            #    music_crs,
+            #    target_turn_number
+            #)
+        chat_history, user_query = chat_history_parser(
+            item["conversations"],
+            music_crs,
+            target_turn_number
+        )
+
         batch_data.append({
-            'user_query': user_query,
-            'user_id': user_id,
-            'session_memory': chat_history
+            "user_query": user_query,
+            "user_id": user_id,
+            "session_memory": chat_history,
+            "session_id": session_id,
+            "turn_number": target_turn_number,
         })
+
         metadata.append({
-            'session_id': session_id,
-            'user_id': user_id,
-            'turn_number': turn_number
+            "session_id": session_id,
+            "user_id": user_id,
+            "turn_number": target_turn_number,
         })
     inference_results = []
     for i in tqdm(range(0, len(batch_data), args.batch_size), desc="Batch inference"):

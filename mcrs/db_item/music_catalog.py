@@ -1,7 +1,7 @@
 import os
-import torch
 import json
 from datasets import load_dataset, concatenate_datasets
+import torch
 
 class MusicCatalogDB:
     def __init__(self,

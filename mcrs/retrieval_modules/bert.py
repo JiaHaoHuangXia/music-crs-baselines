@@ -8,10 +8,11 @@ import os
 import json
 from typing import List, Tuple, Dict
 
-import torch
-import torch.nn.functional as F
 from datasets import load_dataset, concatenate_datasets
 from transformers import AutoTokenizer, AutoModel
+
+import torch
+import torch.nn.functional as F
 
 
 class BERT_MODEL:

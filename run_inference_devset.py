@@ -4,14 +4,15 @@ Batch inference script for Music CRS.
 
 import os
 import json
-import torch
 import argparse
 from mcrs import load_crs_baseline
 from datasets import load_dataset
+import torch
 from tqdm import tqdm
 from typing import List, Dict, Any, Tuple
 import pandas as pd
 from omegaconf import OmegaConf
+import shutil
 
 def chat_history_parser(conversations, music_crs, target_turn_number):
     """
@@ -68,7 +69,9 @@ def main(args):
         - Saves comprehensive results for evaluation
     """
     print("Removing cache directory for preventing memory issues...")
-    os.system("rm -rf cache")
+    #os.system("rm -rf cache")
+    if os.path.exists("cache"):
+        shutil.rmtree("cache")
     config = OmegaConf.load(f"config/{args.tid}.yaml")
     music_crs = load_crs_baseline(
         lm_type=config.lm_type,

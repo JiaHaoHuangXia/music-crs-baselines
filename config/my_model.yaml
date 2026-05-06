@@ -15,5 +15,5 @@ corpus_types: # What info is used for retrieval
   - "tag_list"
   - "release_date"
 cache_dir: "./cache"
-device: "cpu" #"cuda"
+device: "cuda" #"cuda" "cpu"
 attn_implementation: "eager" #"flash_attention_2" 

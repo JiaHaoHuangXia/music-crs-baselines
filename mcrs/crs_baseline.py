@@ -6,6 +6,8 @@ from mcrs.db_user import UserProfileDB
 from mcrs.lm_modules import load_lm_module
 from mcrs.retrieval_modules import load_retrieval_module
 
+from mcrs.query_expansion.gemini_expander import GeminiExpander
+
 class CRS_BASELINE:
     """
     Conversational Recommender System (CRS) baseline that wires together an LLM module and an item retrieval module over a music catalog and user profiles.
@@ -39,6 +41,10 @@ class CRS_BASELINE:
         device="cuda",
         attn_implementation="eager",
         dtype=torch.bfloat16,
+        # New Gemini parameters
+        use_gemini_expansion: bool = False,
+        gemini_model_name: str = "gemini-3.1-flash-lite",
+        gemini_cache_dir: str = "./cache/gemini_expansions",
     ):
         """Initialize the CRS baseline components.
 
@@ -64,6 +70,18 @@ class CRS_BASELINE:
         self.device = device
         self.dtype = dtype
         self.attn_implementation = attn_implementation
+
+        # Gemini query expansion
+        self.use_gemini_expansion = use_gemini_expansion
+
+        if self.use_gemini_expansion:
+            self.gemini_expander = GeminiExpander(
+                model_name=gemini_model_name,
+                cache_dir=gemini_cache_dir,
+            )
+        else:
+            self.gemini_expander = None
+
         self.lm = load_lm_module(self.lm_type, self.device, self.attn_implementation, self.dtype)
         self.retrieval = load_retrieval_module(self.retrieval_type, self.item_db_name, self.track_split_types, self.corpus_types, self.cache_dir)
         self.item_db = MusicCatalogDB(self.item_db_name, self.track_split_types, self.corpus_types)
@@ -75,7 +93,7 @@ class CRS_BASELINE:
             "response_generation": open(f"{self.prompts_dir}/response_generation.txt", "r", encoding="utf-8").read(),
         }
         self.session_memory = []
-
+        
     def _reset_session_memory(self):
         """Clear all messages stored in the current session memory.
         """
@@ -156,8 +174,32 @@ class CRS_BASELINE:
             session_memory.append({"role": "user", "content": user_query})
 
             sys_prompts.append(self._get_system_prompt(user_id))
-            retrieval_input = "\n".join([f"{conversation['role']}: {conversation['content']}" for conversation in session_memory])
+            # Baseline retrieval method 
+            # retrieval_input = "\n".join([f"{conversation['role']}: {conversation['content']}" for conversation in session_memory])
+            # retrieval_inputs.append(retrieval_input)
+            conversation_text = "\n".join([
+                f"{conversation['role']}: {conversation['content']}"
+                for conversation in session_memory
+            ])
+
+            if self.use_gemini_expansion and self.gemini_expander is not None:
+                session_id = data.get("session_id")
+                turn_number = data.get("turn_number")
+
+                try:
+                    retrieval_input = self.gemini_expander.expand(
+                        conversation_text,
+                        session_id=session_id,
+                        turn_number=turn_number,
+                    )
+                except Exception as e:
+                    print(f"Gemini expansion failed, using original query. Error: {e}")
+                    retrieval_input = conversation_text
+            else:
+                retrieval_input = conversation_text
+
             retrieval_inputs.append(retrieval_input)
+
             session_memories.append(session_memory)
 
         # Stage 1: Batch retrieval

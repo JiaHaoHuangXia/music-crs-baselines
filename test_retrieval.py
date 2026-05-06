@@ -1,6 +1,14 @@
-from mcrs.retrieval_modules.bert import BERT_MODEL
-from mcrs.db_item import MusicCatalogDB
+import datasets
+print("Imported datasets first", flush=True)
 
+import torch
+print("Imported torch", flush=True)
+
+from mcrs.retrieval_modules.bert import BERT_MODEL
+print("Imported BERT_MODEL", flush=True)
+
+from mcrs.db_item import MusicCatalogDB
+print("Imported MusicCatalogDB", flush=True)
 
 pseudo_tracks = [
     {
@@ -83,13 +91,16 @@ def main():
     print(expanded_query)
     print("=" * 80)
 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
+    
     print("\nLoading BERT retriever...")
     retriever = BERT_MODEL(
         dataset_name=dataset_name,
         split_types=split_types,
         corpus_types=corpus_types,
         cache_dir="./cache",
-        device="cpu",
+        device=device,
         batch_size=32,
         max_length=128
     )
