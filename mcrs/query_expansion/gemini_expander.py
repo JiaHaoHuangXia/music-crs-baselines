@@ -41,6 +41,7 @@ Each object MUST follow this schema:
   "track_name": [string],
   "artist_name": [string],
   "album_name": [string],
+  "tag_list": [list of genre, mood, theme, instrumentation, energy, and style tags],
   "release_date": string
 }}
 
@@ -50,6 +51,7 @@ Rules:
 - Use previous turns only to understand preferences, dislikes, corrections, and constraints.
 - If the user asks for new artists, avoid artists already recommended or repeatedly mentioned.
 - track_name, artist_name, and album_name MUST be lists with one string inside.
+- tag_list MUST be a list of strings.
 - release_date MUST be a string.
 - Do not include track_id, ISRC, artist_id, album_id, popularity, or duration.
 - Focus on musical attributes that would help retrieve similar tracks from a catalog.
@@ -165,7 +167,7 @@ Conversation:
                     "track_name": [track],
                     "artist_name": ["Unknown Artist"],
                     "album_name": ["Unknown Album"],
-                    #"tag_list": ["music recommendation", "similar style"],
+                    "tag_list": ["music recommendation", "similar style"],
                     "release_date": "",
                 })
                 continue
@@ -178,7 +180,7 @@ Conversation:
                 "track_name": self._to_list_of_strings(track.get("track_name"), "Unknown Track")[:1],
                 "artist_name": self._to_list_of_strings(track.get("artist_name"), "Unknown Artist")[:1],
                 "album_name": self._to_list_of_strings(track.get("album_name"), "Unknown Album")[:1],
-                #"tag_list": self._to_list_of_strings(track.get("tag_list"), "music recommendation"),
+                "tag_list": self._to_list_of_strings(track.get("tag_list"), "music recommendation"),
                 "release_date": str(track.get("release_date", "")).strip(),
             }
 
@@ -189,7 +191,7 @@ Conversation:
 
         return cleaned_tracks[:5]
 
-    def pseudo_tracks_to_query(self, pseudo_tracks):
+    def pseudo_tracks_to_query2(self, pseudo_tracks):
         """
         Convert pseudo-track metadata into a text query for retrieval.
 
@@ -211,18 +213,37 @@ Conversation:
             track_name = ", ".join(track["track_name"])
             artist_name = ", ".join(track["artist_name"])
             album_name = ", ".join(track["album_name"])
-            #tag_list = ", ".join(track["tag_list"])
+            tag_list = ", ".join(track["tag_list"])
             release_date = track["release_date"]
 
             parts.append(
                 f"track_name: {track_name}\n"
                 f"artist_name: {artist_name}\n"
                 f"album_name: {album_name}\n"
-                #f"tag_list: {tag_list}\n"
+                f"tag_list: {tag_list}\n"
                 f"release_date: {release_date}"
             )
 
         return "\n\n".join(parts)
+    
+    def pseudo_tracks_to_query(self, pseudo_tracks):
+        pseudo_tracks = self._normalize_pseudo_tracks(pseudo_tracks)
+
+        all_tags = []
+
+        for track in pseudo_tracks:
+            tags = track.get("tag_list", [])
+            if isinstance(tags, str):
+                tags = [tags]
+
+            all_tags.extend([str(tag).strip() for tag in tags if str(tag).strip()])
+
+        all_tags = list(dict.fromkeys(all_tags))
+
+        if not all_tags:
+            return ""
+
+        return "expanded_tags: " + ", ".join(all_tags)
 
     def _cache_path(self, session_id, turn_number):
         safe_session = str(session_id).replace("/", "_").replace("\\", "_")
