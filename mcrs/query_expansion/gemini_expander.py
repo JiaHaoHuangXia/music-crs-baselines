@@ -41,7 +41,6 @@ Each object MUST follow this schema:
   "track_name": [string],
   "artist_name": [string],
   "album_name": [string],
-  "tag_list": [list of genre, mood, theme, instrumentation, energy, and style tags],
   "release_date": string
 }}
 
@@ -51,7 +50,6 @@ Rules:
 - Use previous turns only to understand preferences, dislikes, corrections, and constraints.
 - If the user asks for new artists, avoid artists already recommended or repeatedly mentioned.
 - track_name, artist_name, and album_name MUST be lists with one string inside.
-- tag_list MUST be a list of strings.
 - release_date MUST be a string.
 - Do not include track_id, ISRC, artist_id, album_id, popularity, or duration.
 - Focus on musical attributes that would help retrieve similar tracks from a catalog.
@@ -141,7 +139,7 @@ Conversation:
                     "track_name": [track],
                     "artist_name": ["Unknown Artist"],
                     "album_name": ["Unknown Album"],
-                    "tag_list": ["music recommendation", "similar style"],
+                    #"tag_list": ["music recommendation", "similar style"],
                     "release_date": "",
                 })
                 continue
@@ -154,7 +152,7 @@ Conversation:
                 "track_name": self._to_list_of_strings(track.get("track_name"), "Unknown Track")[:1],
                 "artist_name": self._to_list_of_strings(track.get("artist_name"), "Unknown Artist")[:1],
                 "album_name": self._to_list_of_strings(track.get("album_name"), "Unknown Album")[:1],
-                "tag_list": self._to_list_of_strings(track.get("tag_list"), "music recommendation"),
+                #"tag_list": self._to_list_of_strings(track.get("tag_list"), "music recommendation"),
                 "release_date": str(track.get("release_date", "")).strip(),
             }
 
@@ -174,14 +172,14 @@ Conversation:
             track_name = ", ".join(track["track_name"])
             artist_name = ", ".join(track["artist_name"])
             album_name = ", ".join(track["album_name"])
-            tag_list = ", ".join(track["tag_list"])
+            #tag_list = ", ".join(track["tag_list"])
             release_date = track["release_date"]
 
             parts.append(
                 f"track_name: {track_name}\n"
                 f"artist_name: {artist_name}\n"
                 f"album_name: {album_name}\n"
-                f"tag_list: {tag_list}\n"
+                #f"tag_list: {tag_list}\n"
                 f"release_date: {release_date}"
             )
 

@@ -174,32 +174,8 @@ class CRS_BASELINE:
             session_memory.append({"role": "user", "content": user_query})
 
             sys_prompts.append(self._get_system_prompt(user_id))
-            # Baseline retrieval method 
-            # retrieval_input = "\n".join([f"{conversation['role']}: {conversation['content']}" for conversation in session_memory])
-            # retrieval_inputs.append(retrieval_input)
-            conversation_text = "\n".join([
-                f"{conversation['role']}: {conversation['content']}"
-                for conversation in session_memory
-            ])
-
-            if self.use_gemini_expansion and self.gemini_expander is not None:
-                session_id = data.get("session_id")
-                turn_number = data.get("turn_number")
-
-                try:
-                    retrieval_input = self.gemini_expander.expand(
-                        conversation_text,
-                        session_id=session_id,
-                        turn_number=turn_number,
-                    )
-                except Exception as e:
-                    print(f"Gemini expansion failed, using original query. Error: {e}")
-                    retrieval_input = conversation_text
-            else:
-                retrieval_input = conversation_text
-
+            retrieval_input = "\n".join([f"{conversation['role']}: {conversation['content']}" for conversation in session_memory])
             retrieval_inputs.append(retrieval_input)
-
             session_memories.append(session_memory)
 
         # Stage 1: Batch retrieval

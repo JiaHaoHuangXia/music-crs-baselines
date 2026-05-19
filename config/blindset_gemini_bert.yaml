@@ -1,5 +1,5 @@
 lm_type: "meta-llama/Llama-3.2-1B-Instruct"
-retrieval_type: "bert"
+retrieval_type: "bm25"
 
 test_dataset_name: "talkpl-ai/TalkPlayData-Challenge-Blind-A"
 item_db_name: "talkpl-ai/TalkPlayData-Challenge-Track-Metadata"
@@ -15,13 +15,13 @@ corpus_types:
   - "track_name"
   - "artist_name"
   - "album_name"
-  - "tag_list"
+#  - "tag_list"
   - "release_date"
 
 cache_dir: "./cache"
 device: "cuda"
 attn_implementation: "eager"
 
-use_gemini_expansion: true
+use_gemini_expansion: false
 gemini_model_name: "gemini-3.1-flash-lite-preview"
 gemini_cache_dir: "./cache/gemini_expansions"

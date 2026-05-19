@@ -1,19 +1,28 @@
+print("Start")
 import os
 import json
-import torch
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+print("2")
 
 from sklearn.decomposition import PCA
+print("2.5")
+
 from sklearn.preprocessing import normalize
+print("3")
 
 # Optional but recommended:
 # pip install umap-learn
 import umap
-
+print("4")
+import torch
 from mcrs.db_item import MusicCatalogDB
 from mcrs.retrieval_modules.bert import BERT_MODEL
+
+
+print("5")
 
 # =========================
 # CONFIG
