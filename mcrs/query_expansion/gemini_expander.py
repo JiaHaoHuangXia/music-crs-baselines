@@ -59,6 +59,20 @@ Conversation:
 """
 
     def _to_list_of_strings(self, value: Any, default: str = "") -> list[str]:
+        """
+        Convert a value into a clean list of strings.
+
+        This helper normalizes Gemini fields that may be returned as strings,
+        lists, numbers, or missing values. Empty values are replaced with the
+        provided default when available.
+
+        Args:
+            value: Value to normalize.
+            default: Fallback string used when the value is empty or missing.
+
+        Returns:
+            A list of non-empty strings.
+        """
         if value is None:
             return [default] if default else []
 
@@ -73,6 +87,18 @@ Conversation:
         return [str(value).strip()] if str(value).strip() else ([default] if default else [])
 
     def _strip_markdown_json(self, text: str) -> str:
+        """
+        Remove markdown code fences from a Gemini JSON response.
+
+        Gemini may sometimes wrap JSON in markdown blocks such as ```json ... ```.
+        This helper removes those wrappers and returns only the raw JSON text.
+
+        Args:
+            text: Raw response text from Gemini.
+
+        Returns:
+            Response text with markdown JSON fences removed.
+        """
         text = text.strip()
 
         if text.startswith("```json"):
@@ -164,6 +190,19 @@ Conversation:
         return cleaned_tracks[:5]
 
     def pseudo_tracks_to_query(self, pseudo_tracks):
+        """
+        Convert pseudo-track metadata into a text query for retrieval.
+
+        The input is first normalized into a list of track dictionaries. Each track
+        is then converted into a multi-line metadata string containing track name,
+        artist name, album name, tags, and release date.
+
+        Args:
+            pseudo_tracks: Gemini-generated pseudo-track data.
+
+        Returns:
+            A string used as the expanded retrieval query.
+        """
         pseudo_tracks = self._normalize_pseudo_tracks(pseudo_tracks)
 
         parts = []
@@ -190,6 +229,23 @@ Conversation:
         return self.cache_dir / f"{safe_session}_turn_{turn_number}.json"
 
     def _call_gemini_with_retry(self, prompt: str):
+        """
+        Call the Gemini API with retry logic for temporary failures.
+
+        This function sends the prompt to the configured Gemini model and retries
+        when the API returns temporary errors such as high demand, rate limits,
+        or internal server errors.
+
+        Args:
+            prompt: The prompt text sent to Gemini.
+
+        Returns:
+            The Gemini API response object.
+
+        Raises:
+            Exception: Re-raises the final API error if all retry attempts fail,
+            or immediately raises non-retryable errors.
+        """
         last_error = None
 
         for attempt in range(1, self.max_retries + 1):
@@ -231,6 +287,22 @@ Conversation:
         raise RuntimeError(f"Gemini failed after {self.max_retries} attempts: {last_error}")
 
     def expand(self, conversation_text, session_id=None, turn_number=None):
+        """
+        Generate or load a Gemini-based query expansion for a conversation turn.
+
+        If a cached Gemini response exists for the given session and turn, it is
+        loaded and converted into a retrieval query. Otherwise, the conversation is
+        sent to Gemini, the response is normalized into pseudo-track metadata,
+        saved to cache, and converted into a BERT-compatible query string.
+
+        Args:
+            conversation_text: Conversation history and current user request.
+            session_id: Optional session identifier used for caching.
+            turn_number: Optional turn number used for caching.
+
+        Returns:
+            A metadata-style query string built from Gemini pseudo-tracks.
+        """
         cache_path = None
 
         if session_id is not None and turn_number is not None:
