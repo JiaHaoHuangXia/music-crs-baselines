@@ -7,3 +7,4 @@ inference/
 .env
 *.key
 build/
+gemini_embedding_analysis/*.png

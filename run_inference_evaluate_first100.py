@@ -298,7 +298,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_rows",
         type=int,
-        default=100,
+        default=50,
         help="Number of conversation rows to evaluate from the start of the test split.",
     )
     parser.add_argument(
