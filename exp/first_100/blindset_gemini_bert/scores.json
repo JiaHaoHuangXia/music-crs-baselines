@@ -1,0 +1,10 @@
+{
+  "ndcg@1": 0.015000000000000001,
+  "ndcg@10": 0.08928339778789217,
+  "ndcg@20": 0.1206117972983663,
+  "catalog_diversity": 0.04661043954876676,
+  "lexical_diversity": 0.4865810019518543,
+  "total_catalog_size": 47071,
+  "subset_conversations": 50,
+  "subset_turns": 400
+}
