@@ -90,10 +90,18 @@ def get_user_turn_numbers(conversations: List[Dict[str, Any]]) -> List[int]:
     )
 
 
-def load_model(config: Any, device_override: str | None) -> Any:
+def load_model(
+    config: Any,
+    device_override: str | None,
+    gemini_cache_dir_override: str | None,
+) -> Any:
     """Instantiate the configured CRS model, allowing an optional CPU override."""
     device = device_override or config.device
     dtype = torch.float32 if device == "cpu" else torch.bfloat16
+    gemini_cache_dir = (
+        gemini_cache_dir_override
+        or config.get("gemini_cache_dir", "./cache/gemini_expansions")
+    )
 
     return load_crs_baseline(
         lm_type=config.lm_type,
@@ -112,10 +120,7 @@ def load_model(config: Any, device_override: str | None) -> Any:
             "gemini_model_name",
             "gemini-3.1-flash-lite-preview",
         ),
-        gemini_cache_dir=config.get(
-            "gemini_cache_dir",
-            "./cache/gemini_expansions",
-        ),
+        gemini_cache_dir=gemini_cache_dir,
     )
 
 
@@ -247,7 +252,7 @@ def evaluate_predictions(
 
 def main(args: argparse.Namespace) -> None:
     config = OmegaConf.load(PROJECT_ROOT / "config" / f"{args.tid}.yaml")
-    music_crs = load_model(config, args.device)
+    music_crs = load_model(config, args.device, args.gemini_cache_dir)
 
     dataset = load_dataset(DATASET_NAME, split=DATASET_SPLIT)
     number_of_rows = min(args.num_rows, len(dataset))
@@ -307,6 +312,15 @@ if __name__ == "__main__":
         choices=["cuda", "cpu"],
         default=None,
         help="Optional override for the device in the model configuration.",
+    )
+    parser.add_argument(
+        "--gemini_cache_dir",
+        type=str,
+        default="./cache/gemini_expansions_devset_first100",
+        help=(
+            "Cache folder for Gemini expansion calls. The default is separate "
+            "from the Blind-A inference cache."
+        ),
     )
     parser.add_argument(
         "--output_dir",
