@@ -118,6 +118,21 @@ MANUAL_RESULTS = [
     },
 ]
 
+DEVSET_SUBSET_RESULTS = [
+    {
+        "experiment": "BM25 + Gemini + tag_list",
+        "split": "Devset first 50 conversations",
+        "turns_evaluated": 400,
+        "ndcg@1": 0.0150,
+        "ndcg@10": 0.08928339778789217,
+        "ndcg@20": 0.1206117972983663,
+        "catalog_diversity": 0.04661043954876676,
+        "lexical_diversity": 0.4865810019518543,
+        "total_catalog_size": 47071,
+        "source": "Local evaluator",
+    },
+]
+
 
 st.set_page_config(
     page_title="Music CRS TFM Dashboard",
@@ -316,7 +331,7 @@ def render_header(title, caption):
 def render_model_results():
     render_header(
         "Model Results",
-        "Blind-A Codabench evaluation results for the model variants tested in this TFM.",
+        "Evaluation results for model variants tested in this TFM.",
     )
     manual_df = pd.DataFrame(MANUAL_RESULTS).sort_values(
         "composite_score",
@@ -324,7 +339,10 @@ def render_model_results():
     )
     metric_grid(manual_df)
 
-    st.markdown("#### Blind-A Codabench Scores")
+    st.markdown("#### Blindset-A Codabench Scores")
+    st.caption(
+        "Official Blindset-A submission results. Each conversation is evaluated at its target turn."
+    )
     st.dataframe(manual_df, width="stretch", hide_index=True)
 
     blind_metric = st.segmented_control(
@@ -350,6 +368,15 @@ def render_model_results():
         yaxis=dict(autorange="reversed"),
     )
     st.plotly_chart(blind_fig, width="stretch")
+
+    st.markdown("#### Devset Subset Scores")
+    st.caption(
+        "Local evaluation on the first 50 conversations of TalkPlayData-Challenge-Dataset, "
+        "with all 8 turns evaluated per conversation. These scores are not directly comparable "
+        "to the Blindset-A Codabench results."
+    )
+    devset_df = pd.DataFrame(DEVSET_SUBSET_RESULTS)
+    st.dataframe(devset_df, width="stretch", hide_index=True)
 
     st.markdown("#### Interpretation")
     st.markdown(
