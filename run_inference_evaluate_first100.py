@@ -121,6 +121,15 @@ def load_model(
             "gemini-3.1-flash-lite-preview",
         ),
         gemini_cache_dir=gemini_cache_dir,
+        gemini_expansion_mode=config.get("gemini_expansion_mode", "tag_query"),
+        gemini_topk_per_reference=config.get("gemini_topk_per_reference", 50),
+        gemini_rrf_k=config.get("gemini_rrf_k", 60),
+        include_original_query_in_fusion=config.get(
+            "include_original_query_in_fusion",
+            False,
+        ),
+        original_query_weight=config.get("original_query_weight", 2.0),
+        gemini_reference_weight=config.get("gemini_reference_weight", 1.0),
     )
 
 

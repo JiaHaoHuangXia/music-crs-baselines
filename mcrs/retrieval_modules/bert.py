@@ -167,6 +167,24 @@ class BERT_MODEL:
         top_indices = torch.topk(scores, k=topk).indices.tolist()
         return [self.track_ids[i] for i in top_indices]
 
+    def text_to_item_retrieval_with_scores(self, query: str, topk: int) -> List[Tuple[str, float]]:
+        """Retrieve top-k track IDs and cosine scores for one query."""
+        self.model.eval()
+        with torch.no_grad():
+            batch = self.tokenizer([query], padding=True, truncation=True, max_length=self.max_length, return_tensors="pt")
+            batch = {k: v.to(self.device) for k, v in batch.items()}
+            outputs = self.model(**batch)
+            query_emb = self._mean_pool(outputs.last_hidden_state, batch["attention_mask"])
+            query_emb = F.normalize(query_emb, p=2, dim=1).cpu().squeeze(0)
+
+        scores = torch.matmul(self.embeddings, query_emb)
+        topk = min(topk, scores.shape[0])
+        top_values, top_indices = torch.topk(scores, k=topk)
+        return [
+            (self.track_ids[idx], float(score))
+            for idx, score in zip(top_indices.tolist(), top_values.tolist())
+        ]
+
     def batch_text_to_item_retrieval(self, queries: List[str], topk: int) -> List[List[str]]:
         """Retrieve top-k track IDs for multiple queries in batch via cosine similarity.
         Args:
@@ -189,4 +207,25 @@ class BERT_MODEL:
         for i in range(len(queries)):
             top_indices = torch.topk(scores[:, i], k=topk).indices.tolist()
             results.append([self.track_ids[idx] for idx in top_indices])
+        return results
+
+    def batch_text_to_item_retrieval_with_scores(self, queries: List[str], topk: int) -> List[List[Tuple[str, float]]]:
+        """Retrieve top-k track IDs and cosine scores for multiple queries."""
+        self.model.eval()
+        with torch.no_grad():
+            batch = self.tokenizer(queries, padding=True, truncation=True, max_length=self.max_length, return_tensors="pt")
+            batch = {k: v.to(self.device) for k, v in batch.items()}
+            outputs = self.model(**batch)
+            query_embs = self._mean_pool(outputs.last_hidden_state, batch["attention_mask"])
+            query_embs = F.normalize(query_embs, p=2, dim=1).cpu()
+
+        scores = torch.matmul(self.embeddings, query_embs.T)
+        results = []
+        topk = min(topk, scores.shape[0])
+        for i in range(len(queries)):
+            top_values, top_indices = torch.topk(scores[:, i], k=topk)
+            results.append([
+                (self.track_ids[idx], float(score))
+                for idx, score in zip(top_indices.tolist(), top_values.tolist())
+            ])
         return results

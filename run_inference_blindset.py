@@ -89,6 +89,15 @@ def main(args):
         use_gemini_expansion=config.get("use_gemini_expansion", False),
         gemini_model_name=config.get("gemini_model_name", "gemini-3.1-flash-lite"),
         gemini_cache_dir=config.get("gemini_cache_dir", "./cache/gemini_expansions"),
+        gemini_expansion_mode=config.get("gemini_expansion_mode", "tag_query"),
+        gemini_topk_per_reference=config.get("gemini_topk_per_reference", 50),
+        gemini_rrf_k=config.get("gemini_rrf_k", 60),
+        include_original_query_in_fusion=config.get(
+            "include_original_query_in_fusion",
+            False,
+        ),
+        original_query_weight=config.get("original_query_weight", 2.0),
+        gemini_reference_weight=config.get("gemini_reference_weight", 1.0),
     )
     db = load_dataset(config.test_dataset_name, split="test")
     # Prepare all batch data at once

@@ -1,5 +1,6 @@
 import os
 import torch
+from collections import defaultdict
 from typing import Optional, Any, List, Dict
 from mcrs.db_item import MusicCatalogDB
 from mcrs.db_user import UserProfileDB
@@ -45,6 +46,12 @@ class CRS_BASELINE:
         use_gemini_expansion: bool = False,
         gemini_model_name: str = "gemini-3.1-flash-lite",
         gemini_cache_dir: str = "./cache/gemini_expansions",
+        gemini_expansion_mode: str = "tag_query",
+        gemini_topk_per_reference: int = 50,
+        gemini_rrf_k: int = 60,
+        include_original_query_in_fusion: bool = False,
+        original_query_weight: float = 2.0,
+        gemini_reference_weight: float = 1.0,
     ):
         """Initialize the CRS baseline components.
 
@@ -73,6 +80,26 @@ class CRS_BASELINE:
 
         # Gemini query expansion
         self.use_gemini_expansion = use_gemini_expansion
+        self.gemini_expansion_mode = gemini_expansion_mode
+        self.gemini_topk_per_reference = gemini_topk_per_reference
+        self.gemini_rrf_k = gemini_rrf_k
+        self.include_original_query_in_fusion = include_original_query_in_fusion
+        self.original_query_weight = original_query_weight
+        self.gemini_reference_weight = gemini_reference_weight
+        valid_gemini_modes = {"tag_query", "multi_query_fusion"}
+        if self.gemini_expansion_mode not in valid_gemini_modes:
+            raise ValueError(
+                f"Unknown gemini_expansion_mode='{self.gemini_expansion_mode}'. "
+                f"Expected one of {sorted(valid_gemini_modes)}."
+            )
+        if (
+            self.use_gemini_expansion
+            and self.gemini_expansion_mode == "multi_query_fusion"
+            and self.retrieval_type != "bert"
+        ):
+            raise ValueError(
+                "gemini_expansion_mode='multi_query_fusion' requires retrieval_type='bert'."
+            )
 
         if self.use_gemini_expansion:
             self.gemini_expander = GeminiExpander(
@@ -93,6 +120,85 @@ class CRS_BASELINE:
             "response_generation": open(f"{self.prompts_dir}/response_generation.txt", "r", encoding="utf-8").read(),
         }
         self.session_memory = []
+
+    def _gemini_reference_to_query(self, track: Dict[str, Any]) -> str:
+        """Convert one Gemini reference track into metadata-style query text."""
+        def clean_join(value: Any) -> str:
+            if isinstance(value, list):
+                return ", ".join(str(item).strip() for item in value if str(item).strip())
+            return str(value).strip() if value is not None else ""
+
+        return (
+            f"track_name: {clean_join(track.get('track_name'))}\n"
+            f"artist_name: {clean_join(track.get('artist_name'))}\n"
+            f"album_name: {clean_join(track.get('album_name'))}\n"
+            f"tag_list: {clean_join(track.get('tag_list'))}\n"
+            f"release_date: {clean_join(track.get('release_date'))}"
+        )
+
+    def _reciprocal_rank_fusion(
+        self,
+        ranked_lists: List[List[Any]],
+        weights: List[float],
+        topk: int,
+    ) -> List[str]:
+        """Fuse multiple ranked track lists using weighted reciprocal rank fusion."""
+        fused_scores = defaultdict(float)
+        best_rank = {}
+
+        for list_idx, ranked_items in enumerate(ranked_lists):
+            weight = weights[list_idx]
+            for rank, item in enumerate(ranked_items, start=1):
+                track_id = item[0] if isinstance(item, tuple) else item
+                fused_scores[track_id] += weight / (self.gemini_rrf_k + rank)
+                best_rank[track_id] = min(best_rank.get(track_id, rank), rank)
+
+        ranked_track_ids = sorted(
+            fused_scores,
+            key=lambda track_id: (-fused_scores[track_id], best_rank[track_id], track_id),
+        )
+        return ranked_track_ids[:topk]
+
+    def _gemini_multi_query_fusion_retrieval(
+        self,
+        conversation_text: str,
+        session_id: Optional[str],
+        turn_number: Optional[int],
+        topk: int = 20,
+    ) -> List[str]:
+        """Retrieve with one BERT query per Gemini reference and fuse rankings."""
+        if self.gemini_expander is None:
+            return self.retrieval.text_to_item_retrieval(conversation_text, topk=topk)
+
+        gemini_tracks = self.gemini_expander.expand_tracks(
+            conversation_text,
+            session_id=session_id,
+            turn_number=turn_number,
+        )
+        query_texts = [self._gemini_reference_to_query(track) for track in gemini_tracks]
+        weights = [self.gemini_reference_weight] * len(query_texts)
+
+        if self.include_original_query_in_fusion:
+            query_texts.insert(0, conversation_text)
+            weights.insert(0, self.original_query_weight)
+
+        if hasattr(self.retrieval, "batch_text_to_item_retrieval_with_scores"):
+            ranked_lists = self.retrieval.batch_text_to_item_retrieval_with_scores(
+                query_texts,
+                topk=self.gemini_topk_per_reference,
+            )
+        elif hasattr(self.retrieval, "batch_text_to_item_retrieval"):
+            ranked_lists = self.retrieval.batch_text_to_item_retrieval(
+                query_texts,
+                topk=self.gemini_topk_per_reference,
+            )
+        else:
+            ranked_lists = [
+                self.retrieval.text_to_item_retrieval(query, topk=self.gemini_topk_per_reference)
+                for query in query_texts
+            ]
+
+        return self._reciprocal_rank_fusion(ranked_lists, weights, topk=topk)
         
     def _reset_session_memory(self):
         """Clear all messages stored in the current session memory.
@@ -164,7 +270,7 @@ class CRS_BASELINE:
         """
         # Prepare batch inputs
         sys_prompts = []
-        retrieval_inputs = []
+        retrieval_requests = []
         session_memories = []
 
         # Original version
@@ -195,7 +301,27 @@ class CRS_BASELINE:
                 for conversation in session_memory
             ])
 
-            if self.use_gemini_expansion and self.gemini_expander is not None:
+            if (
+                self.use_gemini_expansion
+                and self.gemini_expander is not None
+                and self.gemini_expansion_mode == "multi_query_fusion"
+            ):
+                session_id = data.get("session_id")
+                turn_number = data.get("turn_number")
+
+                try:
+                    retrieval_items = self._gemini_multi_query_fusion_retrieval(
+                        conversation_text,
+                        session_id=session_id,
+                        turn_number=turn_number,
+                        topk=20,
+                    )
+                    retrieval_requests.append(retrieval_items)
+                except Exception as e:
+                    print(f"Gemini multi-query fusion failed, using original query. Error: {e}")
+                    retrieval_requests.append(conversation_text)
+
+            elif self.use_gemini_expansion and self.gemini_expander is not None:
                 session_id = data.get("session_id")
                 turn_number = data.get("turn_number")
 
@@ -214,19 +340,38 @@ class CRS_BASELINE:
                 except Exception as e:
                     print(f"Gemini expansion failed, using original query. Error: {e}")
                     retrieval_input = conversation_text
+
+                retrieval_requests.append(retrieval_input)
             else:
                 retrieval_input = conversation_text
-
-            retrieval_inputs.append(retrieval_input)
+                retrieval_requests.append(retrieval_input)
 
             session_memories.append(session_memory)
 
         # Stage 1: Batch retrieval
-        if hasattr(self.retrieval, 'batch_text_to_item_retrieval'):
-            batch_retrieval_items = self.retrieval.batch_text_to_item_retrieval(retrieval_inputs, topk=20)
-        else:
-            # Fallback to sequential retrieval if batch method not available
-            batch_retrieval_items = [self.retrieval.text_to_item_retrieval(inp, topk=20) for inp in retrieval_inputs]
+        batch_retrieval_items = [None] * len(retrieval_requests)
+        text_request_indices = [
+            i for i, request in enumerate(retrieval_requests)
+            if isinstance(request, str)
+        ]
+        text_requests = [retrieval_requests[i] for i in text_request_indices]
+
+        if text_requests:
+            if hasattr(self.retrieval, 'batch_text_to_item_retrieval'):
+                text_retrieval_items = self.retrieval.batch_text_to_item_retrieval(text_requests, topk=20)
+            else:
+                # Fallback to sequential retrieval if batch method not available
+                text_retrieval_items = [
+                    self.retrieval.text_to_item_retrieval(inp, topk=20)
+                    for inp in text_requests
+                ]
+
+            for request_index, retrieval_items in zip(text_request_indices, text_retrieval_items):
+                batch_retrieval_items[request_index] = retrieval_items
+
+        for i, request in enumerate(retrieval_requests):
+            if not isinstance(request, str):
+                batch_retrieval_items[i] = request
 
         recommend_items = [self.item_db.id_to_metadata(items[0]) for items in batch_retrieval_items]
 

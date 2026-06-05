@@ -307,14 +307,14 @@ Conversation:
 
         raise RuntimeError(f"Gemini failed after {self.max_retries} attempts: {last_error}")
 
-    def expand(self, conversation_text, session_id=None, turn_number=None):
+    def expand_tracks(self, conversation_text, session_id=None, turn_number=None):
         """
-        Generate or load a Gemini-based query expansion for a conversation turn.
+        Generate or load Gemini reference tracks for a conversation turn.
 
         If a cached Gemini response exists for the given session and turn, it is
-        loaded and converted into a retrieval query. Otherwise, the conversation is
+        loaded and normalized. Otherwise, the conversation is
         sent to Gemini, the response is normalized into pseudo-track metadata,
-        saved to cache, and converted into a BERT-compatible query string.
+        and saved to cache.
 
         Args:
             conversation_text: Conversation history and current user request.
@@ -322,7 +322,7 @@ Conversation:
             turn_number: Optional turn number used for caching.
 
         Returns:
-            A metadata-style query string built from Gemini pseudo-tracks.
+            A normalized list of up to five Gemini reference track dictionaries.
         """
         cache_path = None
 
@@ -335,7 +335,7 @@ Conversation:
                     with open(cache_path, "r", encoding="utf-8") as f:
                         pseudo_tracks = json.load(f)
 
-                    return self.pseudo_tracks_to_query(pseudo_tracks)
+                    return self._normalize_pseudo_tracks(pseudo_tracks)
 
                 except Exception as e:
                     print(f"Cached Gemini expansion invalid. Deleting cache file. Error: {e}", flush=True)
@@ -369,4 +369,18 @@ Conversation:
 
         time.sleep(self.sleep_seconds)
 
+        return pseudo_tracks
+
+    def expand(self, conversation_text, session_id=None, turn_number=None):
+        """
+        Generate or load a Gemini-based query expansion for a conversation turn.
+
+        Returns:
+            A metadata-style query string built from Gemini pseudo-tracks.
+        """
+        pseudo_tracks = self.expand_tracks(
+            conversation_text,
+            session_id=session_id,
+            turn_number=turn_number,
+        )
         return self.pseudo_tracks_to_query(pseudo_tracks)
