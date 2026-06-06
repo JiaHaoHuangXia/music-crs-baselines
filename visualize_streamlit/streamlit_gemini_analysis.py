@@ -4,6 +4,7 @@ import html
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 
@@ -12,6 +13,7 @@ TFM_ROOT = ROOT.parent
 CSV_PATH = ROOT / "visualize_streamlit" / "gemini_to_catalog_similarity_table.csv"
 DEVSET_GEMINI_PATH = ROOT / "visualize_streamlit" / "devset_gemini_ground_truth_table.csv"
 DEVSET_CONVERSATION_PATH = ROOT / "visualize_streamlit" / "devset_conversation_details.json"
+EMBEDDING_PROJECTION_PATH = ROOT / "visualize_streamlit" / "gemini_embedding_projection.csv"
 SCORES_DIR = TFM_ROOT / "music-crs-evaluator" / "exp" / "scores" / "devset"
 PREDICTIONS_DIR = TFM_ROOT / "music-crs-evaluator" / "exp" / "inference" / "devset"
 
@@ -377,6 +379,31 @@ def load_devset_conversations(path):
         (row["session_id"], int(row["turn_number"])): row
         for row in rows
     }
+
+
+@st.cache_data
+def load_embedding_projection(path):
+    if not path.exists():
+        return pd.DataFrame()
+
+    df = pd.read_csv(path)
+    text_columns = [
+        column
+        for column in df.columns
+        if pd.api.types.is_object_dtype(df[column])
+        or pd.api.types.is_string_dtype(df[column])
+    ]
+    for column in text_columns:
+        df[column] = df[column].map(clean_text)
+
+    if "turn_number" in df.columns:
+        turn_numbers = pd.to_numeric(df["turn_number"], errors="coerce").astype("Int64")
+        df["turn_number_key"] = turn_numbers.astype(str).replace("<NA>", "")
+    if "gemini_reference_rank" in df.columns:
+        ranks = pd.to_numeric(df["gemini_reference_rank"], errors="coerce").astype("Int64")
+        df["gemini_reference_rank_key"] = ranks.astype(str).replace("<NA>", "")
+
+    return df
 
 
 @st.cache_data
@@ -1025,6 +1052,170 @@ def render_devset_comparison(df, conversation_details):
     st.dataframe(per_reference, width="stretch", hide_index=True)
 
 
+def render_embedding_map(df):
+    render_header(
+        "Devset Embedding Map",
+        "Place Gemini-generated reference tracks inside the BERT catalog embedding space.",
+    )
+    if df.empty:
+        st.warning("Embedding projection data was not found.")
+        st.write(
+            "Create it after the matching BERT cache exists. This is an offline step, so Streamlit stays lightweight."
+        )
+        st.code(
+            "python create_gemini_embedding_projection.py "
+            "--gemini_cache_dir ./cache/gemini_expansions_devset_first100",
+            language="powershell",
+        )
+        return
+
+    st.markdown(
+        """
+        **How to read this page.** The gray cloud is the real challenge catalog projected from BERT embeddings
+        into two PCA dimensions. The highlighted points show the selected turn's ground-truth track and the five
+        Gemini-generated reference tracks. If the Gemini points are far from the ground truth, that is visual evidence
+        of query drift.
+        """
+    )
+
+    catalog_df = df[df["point_type"] == "catalog"].copy()
+    gemini_df = df[df["point_type"] == "gemini_reference"].copy()
+    ground_truth_df = df[df["point_type"] == "ground_truth"].copy()
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Catalog tracks", len(catalog_df))
+    col2.metric("Gemini references", len(gemini_df))
+    col3.metric("Ground-truth points", len(ground_truth_df))
+    col4.metric("Sessions", gemini_df["session_id"].nunique() if not gemini_df.empty else 0)
+
+    if gemini_df.empty:
+        st.info("No Gemini reference points are available in the projection CSV.")
+        return
+
+    session_options = sorted(gemini_df["session_id"].dropna().unique())
+    selected_session = st.sidebar.selectbox(
+        "Session",
+        session_options,
+        key="embedding_session",
+    )
+    session_gemini = gemini_df[gemini_df["session_id"] == selected_session].copy()
+
+    turn_options = sorted(session_gemini["turn_number_key"].dropna().unique(), key=lambda value: int(value))
+    selected_turn = st.sidebar.selectbox(
+        "Turn",
+        turn_options,
+        key="embedding_turn",
+    )
+    turn_gemini = session_gemini[session_gemini["turn_number_key"] == selected_turn].copy()
+    turn_ground_truth = ground_truth_df[
+        (ground_truth_df["session_id"] == selected_session)
+        & (ground_truth_df["turn_number_key"] == selected_turn)
+    ].copy()
+
+    genre_options = ["All"] + sorted(catalog_df["broad_genre"].dropna().unique())
+    selected_genre = st.sidebar.selectbox(
+        "Catalog background",
+        genre_options,
+        key="embedding_genre",
+    )
+    visible_catalog = catalog_df
+    if selected_genre != "All":
+        visible_catalog = catalog_df[catalog_df["broad_genre"] == selected_genre]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scattergl(
+            x=visible_catalog["pca_x"],
+            y=visible_catalog["pca_y"],
+            mode="markers",
+            name="Catalog tracks",
+            marker=dict(size=4, color="#c7cbd1", opacity=0.28),
+            text=visible_catalog["track_name"] + " - " + visible_catalog["artist_name"],
+            customdata=visible_catalog[["album_name", "broad_genre", "tag_list"]],
+            hovertemplate=(
+                "<b>%{text}</b><br>"
+                "Album: %{customdata[0]}<br>"
+                "Genre group: %{customdata[1]}<br>"
+                "Tags: %{customdata[2]}<extra></extra>"
+            ),
+        )
+    )
+
+    if not turn_ground_truth.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=turn_ground_truth["pca_x"],
+                y=turn_ground_truth["pca_y"],
+                mode="markers",
+                name="Ground-truth track",
+                marker=dict(size=18, color="#2364aa", symbol="star", line=dict(width=1, color="#ffffff")),
+                text=turn_ground_truth["track_name"] + " - " + turn_ground_truth["artist_name"],
+                customdata=turn_ground_truth[["album_name", "tag_list"]],
+                hovertemplate=(
+                    "<b>%{text}</b><br>"
+                    "Album: %{customdata[0]}<br>"
+                    "Tags: %{customdata[1]}<extra></extra>"
+                ),
+            )
+        )
+
+    fig.add_trace(
+        go.Scatter(
+            x=turn_gemini["pca_x"],
+            y=turn_gemini["pca_y"],
+            mode="markers+text",
+            name="Gemini references",
+            marker=dict(size=14, color="#c4462f", symbol="diamond", line=dict(width=1, color="#ffffff")),
+            text=turn_gemini["gemini_reference_rank_key"],
+            textposition="top center",
+            customdata=turn_gemini[["track_name", "artist_name", "album_name", "tag_list"]],
+            hovertemplate=(
+                "<b>%{customdata[0]} - %{customdata[1]}</b><br>"
+                "Album: %{customdata[2]}<br>"
+                "Tags: %{customdata[3]}<extra></extra>"
+            ),
+        )
+    )
+
+    fig.update_layout(
+        title="PCA map of BERT metadata embeddings",
+        height=660,
+        xaxis_title="PCA component 1",
+        yaxis_title="PCA component 2",
+        legend_title="Point type",
+    )
+    st.plotly_chart(fig, width="stretch")
+
+    st.markdown("#### Highlighted Points")
+    summary_rows = []
+    if not turn_ground_truth.empty:
+        for row in turn_ground_truth.itertuples(index=False):
+            summary_rows.append(
+                {
+                    "type": "Ground truth",
+                    "rank": "",
+                    "track": row.track_name,
+                    "artist": row.artist_name,
+                    "album": row.album_name,
+                    "tags": row.tag_list,
+                }
+            )
+
+    for row in turn_gemini.sort_values("gemini_reference_rank_key").itertuples(index=False):
+        summary_rows.append(
+            {
+                "type": "Gemini reference",
+                "rank": row.gemini_reference_rank_key,
+                "track": row.track_name,
+                "artist": row.artist_name,
+                "album": row.album_name,
+                "tags": row.tag_list,
+            }
+        )
+
+    st.dataframe(pd.DataFrame(summary_rows), width="stretch", hide_index=True)
+
+
 def render_global_gemini(df):
     st.subheader("Global Blindset Similarity")
     if df.empty:
@@ -1102,6 +1293,7 @@ def main():
     gemini_df = load_gemini_table(CSV_PATH)
     devset_gemini_df = load_devset_ground_truth_table(DEVSET_GEMINI_PATH)
     devset_conversations = load_devset_conversations(DEVSET_CONVERSATION_PATH)
+    embedding_projection_df = load_embedding_projection(EMBEDDING_PROJECTION_PATH)
 
     if "active_page" not in st.session_state:
         st.session_state.active_page = "Project Overview"
@@ -1130,6 +1322,13 @@ def main():
             args=("Devset Case Study",),
         )
         st.button(
+            "Devset Embedding Map",
+            width="stretch",
+            type="primary" if st.session_state.active_page == "Devset Embedding Map" else "secondary",
+            on_click=set_active_page,
+            args=("Devset Embedding Map",),
+        )
+        st.button(
             "Blindset Retrieval Explorer",
             width="stretch",
             type="primary" if st.session_state.active_page == "Blindset Retrieval Explorer" else "secondary",
@@ -1145,6 +1344,8 @@ def main():
             st.caption("Compare model performance and understand each metric.")
         elif page == "Devset Case Study":
             st.caption("Inspect conversations with known target tracks.")
+        elif page == "Devset Embedding Map":
+            st.caption("See Gemini references and target tracks inside the BERT embedding space.")
         else:
             st.caption("Explore Gemini references against nearby catalog tracks.")
 
@@ -1158,6 +1359,8 @@ def main():
         render_references()
     elif page == "Devset Case Study":
         render_devset_comparison(devset_gemini_df, devset_conversations)
+    elif page == "Devset Embedding Map":
+        render_embedding_map(embedding_projection_df)
     else:
         render_model_results()
 
