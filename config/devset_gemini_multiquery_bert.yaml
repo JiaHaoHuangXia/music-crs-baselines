@@ -15,7 +15,7 @@ corpus_types:
   - "track_name"
   - "artist_name"
   - "album_name"
-  - "tag_list"
+#  - "tag_list"
   - "release_date"
 
 cache_dir: "./cache"
