@@ -402,6 +402,9 @@ def load_embedding_projection(path):
     if "gemini_reference_rank" in df.columns:
         ranks = pd.to_numeric(df["gemini_reference_rank"], errors="coerce").astype("Int64")
         df["gemini_reference_rank_key"] = ranks.astype(str).replace("<NA>", "")
+    if "retrieved_rank" in df.columns:
+        ranks = pd.to_numeric(df["retrieved_rank"], errors="coerce").astype("Int64")
+        df["retrieved_rank_key"] = ranks.astype(str).replace("<NA>", "")
 
     return df
 
@@ -1081,12 +1084,13 @@ def render_embedding_map(df):
     catalog_df = df[df["point_type"] == "catalog"].copy()
     gemini_df = df[df["point_type"] == "gemini_reference"].copy()
     ground_truth_df = df[df["point_type"] == "ground_truth"].copy()
+    retrieved_df = df[df["point_type"] == "retrieved_track"].copy()
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Catalog tracks", len(catalog_df))
     col2.metric("Gemini references", len(gemini_df))
     col3.metric("Ground-truth points", len(ground_truth_df))
-    col4.metric("Sessions", gemini_df["session_id"].nunique() if not gemini_df.empty else 0)
+    col4.metric("Retrieved highlights", len(retrieved_df))
 
     if gemini_df.empty:
         st.info("No Gemini reference points are available in the projection CSV.")
@@ -1111,6 +1115,29 @@ def render_embedding_map(df):
         (ground_truth_df["session_id"] == selected_session)
         & (ground_truth_df["turn_number_key"] == selected_turn)
     ].copy()
+    turn_retrieved = retrieved_df[
+        (retrieved_df["session_id"] == selected_session)
+        & (retrieved_df["turn_number_key"] == selected_turn)
+    ].copy()
+
+    reference_options = ["All"] + sorted(
+        turn_gemini["gemini_reference_rank_key"].dropna().unique(),
+        key=lambda value: int(value),
+    )
+    selected_reference = st.sidebar.selectbox(
+        "Gemini reference",
+        reference_options,
+        key="embedding_reference",
+    )
+    visible_retrieved = turn_retrieved
+    visible_gemini = turn_gemini
+    if selected_reference != "All":
+        visible_retrieved = turn_retrieved[
+            turn_retrieved["gemini_reference_rank_key"] == selected_reference
+        ]
+        visible_gemini = turn_gemini[
+            turn_gemini["gemini_reference_rank_key"] == selected_reference
+        ]
 
     genre_options = ["All"] + sorted(catalog_df["broad_genre"].dropna().unique())
     selected_genre = st.sidebar.selectbox(
@@ -1159,16 +1186,52 @@ def render_embedding_map(df):
             )
         )
 
+    if not visible_retrieved.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=visible_retrieved["pca_x"],
+                y=visible_retrieved["pca_y"],
+                mode="markers",
+                name="Retrieved tracks",
+                marker=dict(
+                    size=10,
+                    color=visible_retrieved["gemini_reference_rank_key"].astype(int),
+                    colorscale="Turbo",
+                    symbol="circle-open",
+                    line=dict(width=2),
+                ),
+                customdata=visible_retrieved[
+                    [
+                        "track_name",
+                        "artist_name",
+                        "album_name",
+                        "gemini_reference_rank_key",
+                        "retrieved_rank_key",
+                        "cosine_similarity",
+                        "tag_list",
+                    ]
+                ],
+                hovertemplate=(
+                    "<b>%{customdata[0]} - %{customdata[1]}</b><br>"
+                    "Album: %{customdata[2]}<br>"
+                    "Gemini reference: %{customdata[3]}<br>"
+                    "Retrieved rank: %{customdata[4]}<br>"
+                    "Cosine similarity: %{customdata[5]:.4f}<br>"
+                    "Tags: %{customdata[6]}<extra></extra>"
+                ),
+            )
+        )
+
     fig.add_trace(
         go.Scatter(
-            x=turn_gemini["pca_x"],
-            y=turn_gemini["pca_y"],
+            x=visible_gemini["pca_x"],
+            y=visible_gemini["pca_y"],
             mode="markers+text",
             name="Gemini references",
             marker=dict(size=14, color="#c4462f", symbol="diamond", line=dict(width=1, color="#ffffff")),
-            text=turn_gemini["gemini_reference_rank_key"],
+            text=visible_gemini["gemini_reference_rank_key"],
             textposition="top center",
-            customdata=turn_gemini[["track_name", "artist_name", "album_name", "tag_list"]],
+            customdata=visible_gemini[["track_name", "artist_name", "album_name", "tag_list"]],
             hovertemplate=(
                 "<b>%{customdata[0]} - %{customdata[1]}</b><br>"
                 "Album: %{customdata[2]}<br>"
@@ -1214,6 +1277,50 @@ def render_embedding_map(df):
         )
 
     st.dataframe(pd.DataFrame(summary_rows), width="stretch", hide_index=True)
+
+    st.markdown("#### Retrieved Tracks From Gemini References")
+    if visible_retrieved.empty:
+        st.info(
+            "No retrieved-track highlights are available. Regenerate the projection CSV with the updated script."
+        )
+    else:
+        retrieved_table = visible_retrieved[
+            [
+                "gemini_reference_rank_key",
+                "retrieved_rank_key",
+                "cosine_similarity",
+                "track_name",
+                "artist_name",
+                "album_name",
+                "tag_list",
+            ]
+        ].rename(
+            columns={
+                "gemini_reference_rank_key": "gemini_reference",
+                "retrieved_rank_key": "retrieved_rank",
+                "track_name": "track",
+                "artist_name": "artist",
+                "album_name": "album",
+                "tag_list": "tags",
+            }
+        )
+        retrieved_table["_gemini_reference_sort"] = pd.to_numeric(
+            retrieved_table["gemini_reference"],
+            errors="coerce",
+        )
+        retrieved_table["_retrieved_rank_sort"] = pd.to_numeric(
+            retrieved_table["retrieved_rank"],
+            errors="coerce",
+        )
+        retrieved_table = retrieved_table.sort_values(
+            ["_gemini_reference_sort", "_retrieved_rank_sort"]
+        ).drop(columns=["_gemini_reference_sort", "_retrieved_rank_sort"])
+        st.dataframe(
+            retrieved_table,
+            width="stretch",
+            hide_index=True,
+            height=360,
+        )
 
 
 def render_global_gemini(df):

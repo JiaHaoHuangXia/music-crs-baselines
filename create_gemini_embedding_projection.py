@@ -170,6 +170,8 @@ def build_catalog_rows(
                 "session_id": "",
                 "turn_number": "",
                 "gemini_reference_rank": "",
+                "retrieved_rank": "",
+                "cosine_similarity": "",
                 "track_id": track_id,
                 "track_name": field_to_text(item.get("track_name", "")),
                 "artist_name": field_to_text(item.get("artist_name", "")),
@@ -235,6 +237,12 @@ def main() -> None:
     )
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--device", choices=["cuda", "cpu"], default=None)
+    parser.add_argument(
+        "--topk_retrieved_per_reference",
+        type=int,
+        default=10,
+        help="Number of nearest catalog tracks to highlight for each Gemini reference.",
+    )
     args = parser.parse_args()
 
     corpus_name = "_".join(args.corpus_types)
@@ -283,6 +291,8 @@ def main() -> None:
                     "session_id": session_id,
                     "turn_number": turn_number,
                     "gemini_reference_rank": rank,
+                    "retrieved_rank": "",
+                    "cosine_similarity": "",
                     "track_id": "",
                     "track_name": ", ".join(track["track_name"]),
                     "artist_name": ", ".join(track["artist_name"]),
@@ -293,6 +303,7 @@ def main() -> None:
                 }
             )
 
+    retrieved_rows = []
     if gemini_texts:
         gemini_embeddings = embed_texts(
             gemini_texts,
@@ -307,8 +318,23 @@ def main() -> None:
             row["pca_x"] = gemini_coords[idx, 0]
             row["pca_y"] = gemini_coords[idx, 1]
 
+        similarities = np.matmul(gemini_embeddings, catalog_embeddings.T)
+        topk = min(args.topk_retrieved_per_reference, similarities.shape[1])
+        for gemini_idx, gemini_row in enumerate(gemini_rows):
+            top_indices = np.argsort(-similarities[gemini_idx])[:topk]
+            for retrieved_rank, catalog_idx in enumerate(top_indices, start=1):
+                track_id = track_ids[catalog_idx]
+                retrieved_row = dict(catalog_rows_by_id[track_id])
+                retrieved_row["point_type"] = "retrieved_track"
+                retrieved_row["session_id"] = gemini_row["session_id"]
+                retrieved_row["turn_number"] = gemini_row["turn_number"]
+                retrieved_row["gemini_reference_rank"] = gemini_row["gemini_reference_rank"]
+                retrieved_row["retrieved_rank"] = retrieved_rank
+                retrieved_row["cosine_similarity"] = float(similarities[gemini_idx, catalog_idx])
+                retrieved_rows.append(retrieved_row)
+
     ground_truth_rows = build_ground_truth_rows(Path(args.devset_table), catalog_rows_by_id)
-    output_rows = catalog_rows + ground_truth_rows + gemini_rows
+    output_rows = catalog_rows + ground_truth_rows + retrieved_rows + gemini_rows
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(output_rows).to_csv(output_path, index=False, encoding="utf-8")
