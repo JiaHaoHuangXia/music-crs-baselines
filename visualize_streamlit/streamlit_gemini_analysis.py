@@ -135,6 +135,59 @@ DEVSET_SUBSET_RESULTS = [
         "lexical_diversity": 0.4865810019518543,
         "total_catalog_size": 47071,
         "source": "Local evaluator",
+        "note": "Previous first-50 devset reference run.",
+    },
+    {
+        "experiment": "BERT + Gemini multi-query fusion + tag_list",
+        "split": "Devset first 50 conversations",
+        "turns_evaluated": 400,
+        "ndcg@1": 0.0050,
+        "ndcg@10": 0.0172569051749283,
+        "ndcg@20": 0.022337180121647184,
+        "catalog_diversity": 0.037793970810052896,
+        "lexical_diversity": 0.4600994125621328,
+        "total_catalog_size": 47071,
+        "source": "Local evaluator",
+        "note": "Each Gemini reference track is embedded separately; rankings are fused with RRF.",
+    },
+    {
+        "experiment": "BERT + Gemini multi-query fusion + tag_list + conversation",
+        "split": "Devset first 50 conversations",
+        "turns_evaluated": 400,
+        "ndcg@1": 0.0050,
+        "ndcg@10": 0.01896599825802791,
+        "ndcg@20": 0.025201424361161535,
+        "catalog_diversity": 0.04100189076076565,
+        "lexical_diversity": 0.46515103482632125,
+        "total_catalog_size": 47071,
+        "source": "Local evaluator",
+        "note": "Hybrid fusion: Gemini reference queries plus original conversation with higher weight.",
+    },
+    {
+        "experiment": "BERT + Gemini multi-query fusion, no tag_list",
+        "split": "Devset first 50 conversations",
+        "turns_evaluated": 400,
+        "ndcg@1": 0.0100,
+        "ndcg@10": 0.03209145337491858,
+        "ndcg@20": 0.03769050564476374,
+        "catalog_diversity": 0.03526587495485543,
+        "lexical_diversity": 0.4684398570861453,
+        "total_catalog_size": 47071,
+        "source": "Local evaluator",
+        "note": "No-tag rerun. This overwrote the original folder, but improved over the tag-list multi-query variant.",
+    },
+    {
+        "experiment": "BERT + Gemini multi-query fusion + conversation, no tag_list",
+        "split": "Devset first 50 conversations",
+        "turns_evaluated": 400,
+        "ndcg@1": 0.0050,
+        "ndcg@10": 0.02742079093061506,
+        "ndcg@20": 0.0336234679375138,
+        "catalog_diversity": 0.03354507021308237,
+        "lexical_diversity": 0.47563773788635444,
+        "total_catalog_size": 47071,
+        "source": "Local evaluator",
+        "note": "No-tag hybrid rerun. The original conversation did not help as much as in the tag-list setting.",
     },
 ]
 
@@ -1055,7 +1108,7 @@ def render_devset_comparison(df, conversation_details):
     st.dataframe(per_reference, width="stretch", hide_index=True)
 
 
-def render_embedding_map(df):
+def render_embedding_map(df, conversation_details):
     render_header(
         "Devset Embedding Map",
         "Place Gemini-generated reference tracks inside the BERT catalog embedding space.",
@@ -1078,6 +1131,10 @@ def render_embedding_map(df):
         into two PCA dimensions. The highlighted points show the selected turn's ground-truth track and the five
         Gemini-generated reference tracks. If the Gemini points are far from the ground truth, that is visual evidence
         of query drift.
+
+        The final top-20 recommendations, Gemini references, and embedding projection are loaded from exported
+        dashboard files. After running a new model, refresh those files with `refresh_streamlit_artifacts.py`
+        so this page and the Devset Case Study page describe the same run.
         """
     )
 
@@ -1120,10 +1177,12 @@ def render_embedding_map(df):
         & (retrieved_df["turn_number_key"] == selected_turn)
     ].copy()
 
-    reference_options = ["All"] + sorted(
-        turn_gemini["gemini_reference_rank_key"].dropna().unique(),
-        key=lambda value: int(value),
-    )
+    turn_gemini = turn_gemini.sort_values("gemini_reference_rank_key").copy()
+    reference_label_by_rank = {
+        row.gemini_reference_rank_key: f"{row.gemini_reference_rank_key}. {row.track_name} - {row.artist_name}"
+        for row in turn_gemini.itertuples(index=False)
+    }
+    reference_options = ["All"] + list(reference_label_by_rank.values())
     selected_reference = st.sidebar.selectbox(
         "Gemini reference",
         reference_options,
@@ -1132,12 +1191,52 @@ def render_embedding_map(df):
     visible_retrieved = turn_retrieved
     visible_gemini = turn_gemini
     if selected_reference != "All":
+        selected_reference_rank = selected_reference.split(".", 1)[0]
         visible_retrieved = turn_retrieved[
-            turn_retrieved["gemini_reference_rank_key"] == selected_reference
+            turn_retrieved["gemini_reference_rank_key"] == selected_reference_rank
         ]
         visible_gemini = turn_gemini[
-            turn_gemini["gemini_reference_rank_key"] == selected_reference
+            turn_gemini["gemini_reference_rank_key"] == selected_reference_rank
         ]
+
+    reference_colors = {
+        "1": "#c4462f",
+        "2": "#2f80c4",
+        "3": "#7b4fb3",
+        "4": "#2f9e67",
+        "5": "#d18a00",
+    }
+    if not turn_retrieved.empty:
+        turn_retrieved["gemini_reference_track"] = turn_retrieved["gemini_reference_rank_key"].map(
+            reference_label_by_rank
+        )
+    if not visible_retrieved.empty:
+        visible_retrieved["gemini_reference_track"] = visible_retrieved["gemini_reference_rank_key"].map(
+            reference_label_by_rank
+        )
+
+    selected_detail = conversation_details.get((selected_session, int(selected_turn)))
+    final_recommendations = []
+    if selected_detail is not None:
+        catalog_by_track_id = catalog_df.set_index("track_id")
+        for rank, track in enumerate(selected_detail.get("predicted_tracks", []), start=1):
+            track_id = track.get("track_id")
+            if track_id not in catalog_by_track_id.index:
+                continue
+            catalog_row = catalog_by_track_id.loc[track_id]
+            final_recommendations.append(
+                {
+                    "rank": rank,
+                    "track_id": track_id,
+                    "track_name": track.get("track_name", catalog_row["track_name"]),
+                    "artist_name": track.get("artist_name", catalog_row["artist_name"]),
+                    "album_name": track.get("album_name", catalog_row["album_name"]),
+                    "tag_list": catalog_row["tag_list"],
+                    "pca_x": catalog_row["pca_x"],
+                    "pca_y": catalog_row["pca_y"],
+                }
+            )
+    final_recommendations_df = pd.DataFrame(final_recommendations)
 
     genre_options = ["All"] + sorted(catalog_df["broad_genre"].dropna().unique())
     selected_genre = st.sidebar.selectbox(
@@ -1186,66 +1285,101 @@ def render_embedding_map(df):
             )
         )
 
-    if not visible_retrieved.empty:
+    if not final_recommendations_df.empty:
         fig.add_trace(
             go.Scatter(
-                x=visible_retrieved["pca_x"],
-                y=visible_retrieved["pca_y"],
-                mode="markers",
-                name="Retrieved tracks",
+                x=final_recommendations_df["pca_x"],
+                y=final_recommendations_df["pca_y"],
+                mode="markers+text",
+                name="Final top-20 recommendations",
                 marker=dict(
-                    size=10,
-                    color=visible_retrieved["gemini_reference_rank_key"].astype(int),
-                    colorscale="Turbo",
-                    symbol="circle-open",
-                    line=dict(width=2),
+                    size=12,
+                    color="#111827",
+                    symbol="square",
+                    line=dict(width=1, color="#ffffff"),
+                    opacity=0.9,
                 ),
-                customdata=visible_retrieved[
-                    [
-                        "track_name",
-                        "artist_name",
-                        "album_name",
-                        "gemini_reference_rank_key",
-                        "retrieved_rank_key",
-                        "cosine_similarity",
-                        "tag_list",
-                    ]
+                text=final_recommendations_df["rank"].astype(str),
+                textposition="bottom center",
+                customdata=final_recommendations_df[
+                    ["rank", "track_name", "artist_name", "album_name", "tag_list"]
                 ],
                 hovertemplate=(
-                    "<b>%{customdata[0]} - %{customdata[1]}</b><br>"
-                    "Album: %{customdata[2]}<br>"
-                    "Gemini reference: %{customdata[3]}<br>"
-                    "Retrieved rank: %{customdata[4]}<br>"
-                    "Cosine similarity: %{customdata[5]:.4f}<br>"
-                    "Tags: %{customdata[6]}<extra></extra>"
+                    "<b>Final recommendation #%{customdata[0]}</b><br>"
+                    "%{customdata[1]} - %{customdata[2]}<br>"
+                    "Album: %{customdata[3]}<br>"
+                    "Tags: %{customdata[4]}<extra></extra>"
                 ),
             )
         )
 
-    fig.add_trace(
-        go.Scatter(
-            x=visible_gemini["pca_x"],
-            y=visible_gemini["pca_y"],
-            mode="markers+text",
-            name="Gemini references",
-            marker=dict(size=14, color="#c4462f", symbol="diamond", line=dict(width=1, color="#ffffff")),
-            text=visible_gemini["gemini_reference_rank_key"],
-            textposition="top center",
-            customdata=visible_gemini[["track_name", "artist_name", "album_name", "tag_list"]],
-            hovertemplate=(
-                "<b>%{customdata[0]} - %{customdata[1]}</b><br>"
-                "Album: %{customdata[2]}<br>"
-                "Tags: %{customdata[3]}<extra></extra>"
-            ),
+    for reference_rank, reference_gemini in visible_gemini.groupby("gemini_reference_rank_key"):
+        color = reference_colors.get(str(reference_rank), "#c4462f")
+        reference_label = reference_label_by_rank.get(str(reference_rank), f"Gemini reference {reference_rank}")
+        reference_retrieved = visible_retrieved[
+            visible_retrieved["gemini_reference_rank_key"] == str(reference_rank)
+        ]
+
+        if not reference_retrieved.empty:
+            fig.add_trace(
+                go.Scatter(
+                    x=reference_retrieved["pca_x"],
+                    y=reference_retrieved["pca_y"],
+                    mode="markers",
+                    name=f"Retrieved from {reference_label}",
+                    marker=dict(
+                        size=10,
+                        color=color,
+                        symbol="circle-open",
+                        line=dict(width=2),
+                    ),
+                    customdata=reference_retrieved[
+                        [
+                            "track_name",
+                            "artist_name",
+                            "album_name",
+                            "gemini_reference_track",
+                            "retrieved_rank_key",
+                            "cosine_similarity",
+                            "tag_list",
+                        ]
+                    ],
+                    hovertemplate=(
+                        "<b>%{customdata[0]} - %{customdata[1]}</b><br>"
+                        "Album: %{customdata[2]}<br>"
+                        "From Gemini: %{customdata[3]}<br>"
+                        "Retrieved rank for that Gemini track: %{customdata[4]}<br>"
+                        "Cosine similarity: %{customdata[5]:.4f}<br>"
+                        "Tags: %{customdata[6]}<extra></extra>"
+                    ),
+                )
+            )
+
+        fig.add_trace(
+            go.Scatter(
+                x=reference_gemini["pca_x"],
+                y=reference_gemini["pca_y"],
+                mode="markers+text",
+                name=reference_label,
+                marker=dict(size=16, color=color, symbol="diamond", line=dict(width=1, color="#ffffff")),
+                text=reference_gemini["gemini_reference_rank_key"],
+                textposition="top center",
+                customdata=reference_gemini[["track_name", "artist_name", "album_name", "tag_list"]],
+                hovertemplate=(
+                    "<b>Gemini reference %{text}</b><br>"
+                    "%{customdata[0]} - %{customdata[1]}<br>"
+                    "Album: %{customdata[2]}<br>"
+                    "Tags: %{customdata[3]}<extra></extra>"
+                ),
+            )
         )
-    )
 
     fig.update_layout(
         title="PCA map of BERT metadata embeddings",
         height=660,
         xaxis_title="PCA component 1",
         yaxis_title="PCA component 2",
-        legend_title="Point type",
+        legend_title="Gemini source",
     )
     st.plotly_chart(fig, width="stretch")
 
@@ -1278,7 +1412,29 @@ def render_embedding_map(df):
 
     st.dataframe(pd.DataFrame(summary_rows), width="stretch", hide_index=True)
 
-    st.markdown("#### Retrieved Tracks From Gemini References")
+    st.markdown("#### Final Top-20 Recommendations")
+    st.caption(
+        "These are the final model recommendations shown in the Devset Case Study page, projected onto the same PCA map."
+    )
+    if final_recommendations_df.empty:
+        st.info("No final recommendation details are available for this selected turn.")
+    else:
+        final_table = final_recommendations_df[
+            ["rank", "track_name", "artist_name", "album_name", "tag_list"]
+        ].rename(
+            columns={
+                "track_name": "track",
+                "artist_name": "artist",
+                "album_name": "album",
+                "tag_list": "tags",
+            }
+        )
+        st.dataframe(final_table, width="stretch", hide_index=True, height=360)
+
+    st.markdown("#### BERT Nearest Tracks For Each Gemini Reference")
+    st.caption(
+        "These are diagnostic nearest-neighbor tracks around each Gemini reference, not the final recommendation list."
+    )
     if visible_retrieved.empty:
         st.info(
             "No retrieved-track highlights are available. Regenerate the projection CSV with the updated script."
@@ -1287,6 +1443,7 @@ def render_embedding_map(df):
         retrieved_table = visible_retrieved[
             [
                 "gemini_reference_rank_key",
+                "gemini_reference_track",
                 "retrieved_rank_key",
                 "cosine_similarity",
                 "track_name",
@@ -1297,6 +1454,7 @@ def render_embedding_map(df):
         ].rename(
             columns={
                 "gemini_reference_rank_key": "gemini_reference",
+                "gemini_reference_track": "source_gemini_track",
                 "retrieved_rank_key": "retrieved_rank",
                 "track_name": "track",
                 "artist_name": "artist",
@@ -1467,7 +1625,7 @@ def main():
     elif page == "Devset Case Study":
         render_devset_comparison(devset_gemini_df, devset_conversations)
     elif page == "Devset Embedding Map":
-        render_embedding_map(embedding_projection_df)
+        render_embedding_map(embedding_projection_df, devset_conversations)
     else:
         render_model_results()
 

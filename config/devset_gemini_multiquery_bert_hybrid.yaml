@@ -16,7 +16,7 @@ corpus_types:
   - "artist_name"
   - "album_name"
 #  - "tag_list"
-  - "release_date"
+#  - "release_date"
 
 cache_dir: "./cache"
 device: "cuda"
