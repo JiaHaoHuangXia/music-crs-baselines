@@ -105,10 +105,11 @@ class CRS_BASELINE:
         if (
             self.use_gemini_expansion
             and self.gemini_expansion_mode == "multi_query_fusion"
-            and self.retrieval_type != "bert"
+            and self.retrieval_type not in {"bert", "sentence_transformer"}
         ):
             raise ValueError(
-                "gemini_expansion_mode='multi_query_fusion' requires retrieval_type='bert'."
+                "gemini_expansion_mode='multi_query_fusion' requires retrieval_type='bert' "
+                "or retrieval_type='sentence_transformer'."
             )
 
         if self.use_gemini_expansion:
