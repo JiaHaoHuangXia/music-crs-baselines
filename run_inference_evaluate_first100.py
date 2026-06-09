@@ -131,6 +131,7 @@ def load_model(
         original_query_weight=config.get("original_query_weight", 2.0),
         gemini_reference_weight=config.get("gemini_reference_weight", 1.0),
         gemini_max_reference_tracks=config.get("gemini_max_reference_tracks", None),
+        gemini_fusion_method=config.get("gemini_fusion_method", "rrf"),
     )
 
 

@@ -189,6 +189,32 @@ DEVSET_SUBSET_RESULTS = [
         "source": "Local evaluator",
         "note": "No-tag hybrid rerun. The original conversation did not help as much as in the tag-list setting.",
     },
+    {
+        "experiment": "BERT + Gemini top-2 fusion, no tag_list/release_date",
+        "split": "Devset first 50 conversations",
+        "turns_evaluated": 400,
+        "ndcg@1": 0.0100,
+        "ndcg@10": 0.02586563444205212,
+        "ndcg@20": 0.03042129429837016,
+        "catalog_diversity": 0.036583034139916294,
+        "lexical_diversity": 0.4625166473342785,
+        "total_catalog_size": 47071,
+        "source": "Local evaluator",
+        "note": "Uses only Gemini references 1 and 2. Corpus fields: track, artist, album.",
+    },
+    {
+        "experiment": "BERT + Gemini top-2 fusion, no tag_list/release_date, topk folder",
+        "split": "Devset first 50 conversations",
+        "turns_evaluated": 400,
+        "ndcg@1": 0.0100,
+        "ndcg@10": 0.02586563444205212,
+        "ndcg@20": 0.03042129429837016,
+        "catalog_diversity": 0.036583034139916294,
+        "lexical_diversity": 0.46150862068965515,
+        "total_catalog_size": 47071,
+        "source": "Local evaluator",
+        "note": "This result folder was named topk10, but the config still used topk=50. Config has now been fixed; rerun for a true topk=10 score.",
+    },
 ]
 
 

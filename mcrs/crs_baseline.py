@@ -53,6 +53,7 @@ class CRS_BASELINE:
         original_query_weight: float = 2.0,
         gemini_reference_weight: float = 1.0,
         gemini_max_reference_tracks: Optional[int] = None,
+        gemini_fusion_method: str = "rrf",
     ):
         """Initialize the CRS baseline components.
 
@@ -88,11 +89,18 @@ class CRS_BASELINE:
         self.original_query_weight = original_query_weight
         self.gemini_reference_weight = gemini_reference_weight
         self.gemini_max_reference_tracks = gemini_max_reference_tracks
+        self.gemini_fusion_method = gemini_fusion_method
         valid_gemini_modes = {"tag_query", "multi_query_fusion"}
         if self.gemini_expansion_mode not in valid_gemini_modes:
             raise ValueError(
                 f"Unknown gemini_expansion_mode='{self.gemini_expansion_mode}'. "
                 f"Expected one of {sorted(valid_gemini_modes)}."
+            )
+        valid_fusion_methods = {"rrf", "max_similarity"}
+        if self.gemini_fusion_method not in valid_fusion_methods:
+            raise ValueError(
+                f"Unknown gemini_fusion_method='{self.gemini_fusion_method}'. "
+                f"Expected one of {sorted(valid_fusion_methods)}."
             )
         if (
             self.use_gemini_expansion
@@ -161,6 +169,32 @@ class CRS_BASELINE:
         )
         return ranked_track_ids[:topk]
 
+    def _max_similarity_fusion(
+        self,
+        ranked_lists: List[List[Any]],
+        topk: int,
+    ) -> List[str]:
+        """Fuse scored ranked lists by each track's best cosine similarity."""
+        max_scores = {}
+        best_rank = {}
+
+        for ranked_items in ranked_lists:
+            for rank, item in enumerate(ranked_items, start=1):
+                if isinstance(item, tuple):
+                    track_id, score = item
+                else:
+                    track_id, score = item, 0.0
+
+                if track_id not in max_scores or score > max_scores[track_id]:
+                    max_scores[track_id] = score
+                best_rank[track_id] = min(best_rank.get(track_id, rank), rank)
+
+        ranked_track_ids = sorted(
+            max_scores,
+            key=lambda track_id: (-max_scores[track_id], best_rank[track_id], track_id),
+        )
+        return ranked_track_ids[:topk]
+
     def _gemini_multi_query_fusion_retrieval(
         self,
         conversation_text: str,
@@ -202,6 +236,9 @@ class CRS_BASELINE:
                 self.retrieval.text_to_item_retrieval(query, topk=self.gemini_topk_per_reference)
                 for query in query_texts
             ]
+
+        if self.gemini_fusion_method == "max_similarity":
+            return self._max_similarity_fusion(ranked_lists, topk=topk)
 
         return self._reciprocal_rank_fusion(ranked_lists, weights, topk=topk)
         

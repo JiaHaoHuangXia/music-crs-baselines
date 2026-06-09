@@ -22,10 +22,10 @@ attn_implementation: "eager"
 
 use_gemini_expansion: true
 gemini_expansion_mode: "multi_query_fusion"
+gemini_fusion_method: "max_similarity"
 gemini_model_name: "gemini-3.1-flash-lite-preview"
 gemini_cache_dir: "./cache/gemini_expansions"
-gemini_max_reference_tracks: 2
-gemini_topk_per_reference: 10
+gemini_topk_per_reference: 50
 gemini_rrf_k: 60
 include_original_query_in_fusion: false
 original_query_weight: 2.0
