@@ -52,6 +52,7 @@ class CRS_BASELINE:
         include_original_query_in_fusion: bool = False,
         original_query_weight: float = 2.0,
         gemini_reference_weight: float = 1.0,
+        gemini_max_reference_tracks: Optional[int] = None,
     ):
         """Initialize the CRS baseline components.
 
@@ -86,6 +87,7 @@ class CRS_BASELINE:
         self.include_original_query_in_fusion = include_original_query_in_fusion
         self.original_query_weight = original_query_weight
         self.gemini_reference_weight = gemini_reference_weight
+        self.gemini_max_reference_tracks = gemini_max_reference_tracks
         valid_gemini_modes = {"tag_query", "multi_query_fusion"}
         if self.gemini_expansion_mode not in valid_gemini_modes:
             raise ValueError(
@@ -175,6 +177,9 @@ class CRS_BASELINE:
             session_id=session_id,
             turn_number=turn_number,
         )
+        if self.gemini_max_reference_tracks is not None:
+            gemini_tracks = gemini_tracks[:self.gemini_max_reference_tracks]
+
         query_texts = [self._gemini_reference_to_query(track) for track in gemini_tracks]
         weights = [self.gemini_reference_weight] * len(query_texts)
 

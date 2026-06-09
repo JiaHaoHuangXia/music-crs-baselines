@@ -98,6 +98,7 @@ def main(args):
         ),
         original_query_weight=config.get("original_query_weight", 2.0),
         gemini_reference_weight=config.get("gemini_reference_weight", 1.0),
+        gemini_max_reference_tracks=config.get("gemini_max_reference_tracks", None),
     )
     db = load_dataset(config.test_dataset_name, split="test")
     # Prepare all batch data at once

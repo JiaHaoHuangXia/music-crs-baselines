@@ -22,6 +22,7 @@ def load_crs_baseline(
     include_original_query_in_fusion=False,
     original_query_weight=2.0,
     gemini_reference_weight=1.0,
+    gemini_max_reference_tracks=None,
 ):
     return CRS_BASELINE(
         lm_type=lm_type,
@@ -44,4 +45,5 @@ def load_crs_baseline(
         include_original_query_in_fusion=include_original_query_in_fusion,
         original_query_weight=original_query_weight,
         gemini_reference_weight=gemini_reference_weight,
+        gemini_max_reference_tracks=gemini_max_reference_tracks,
     )
