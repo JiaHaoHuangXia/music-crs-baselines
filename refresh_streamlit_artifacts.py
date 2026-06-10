@@ -38,7 +38,13 @@ def main() -> None:
         "--corpus_types",
         nargs="+",
         default=["track_name", "artist_name", "album_name", "tag_list", "release_date"],
-        help="BERT corpus fields matching the embedding cache used for the projection.",
+        help="Corpus fields matching the embedding cache used for the projection.",
+    )
+    parser.add_argument(
+        "--projection_retrieval_type",
+        choices=["bert", "sentence_transformer"],
+        default="bert",
+        help="Embedding retriever used for gemini_embedding_projection.csv.",
     )
     parser.add_argument(
         "--skip_embedding_projection",
@@ -94,6 +100,8 @@ def main() -> None:
         str(gemini_ground_truth_output),
         "--output",
         str(embedding_projection_output),
+        "--projection_retrieval_type",
+        args.projection_retrieval_type,
         "--topk_retrieved_per_reference",
         str(args.topk_retrieved_per_reference),
         "--corpus_types",

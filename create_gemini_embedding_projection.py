@@ -1,8 +1,9 @@
 """
-Create a PCA map of catalog BERT embeddings and Gemini reference embeddings.
+Create a PCA map of catalog embeddings and Gemini reference embeddings.
 
-This script is intended to be run offline after the BERT embedding cache exists.
-It writes a CSV that Streamlit can load without initializing BERT.
+This script is intended to be run offline after the matching retrieval embedding
+cache exists. It writes a CSV that Streamlit can load without initializing an
+embedding model.
 """
 
 import argparse
@@ -20,12 +21,14 @@ from sklearn.preprocessing import normalize
 import torch
 import torch.nn.functional as F
 from datasets import concatenate_datasets, load_dataset
+from sentence_transformers import SentenceTransformer
 from transformers import AutoModel, AutoTokenizer
 
 
 DATASET_NAME = "talkpl-ai/TalkPlayData-Challenge-Track-Metadata"
 SPLIT_TYPES = ["all_tracks"]
 MODEL_NAME = "bert-base-uncased"
+SENTENCE_TRANSFORMER_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 RANDOM_SEED = 42
 
 
@@ -130,6 +133,63 @@ def embed_texts(
     return torch.cat(embeddings, dim=0).numpy()
 
 
+def embed_texts_sentence_transformer(
+    texts: list[str],
+    model: SentenceTransformer,
+    batch_size: int,
+) -> np.ndarray:
+    embeddings = model.encode(
+        texts,
+        batch_size=batch_size,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+        show_progress_bar=False,
+    )
+    return normalize(embeddings)
+
+
+def get_index_dir(cache_dir: Path, retrieval_type: str, corpus_types: list[str]) -> Path:
+    corpus_name = "_".join(corpus_types)
+    if retrieval_type == "bert":
+        return cache_dir / "bert" / corpus_name
+    if retrieval_type == "sentence_transformer":
+        model_cache_name = SENTENCE_TRANSFORMER_MODEL_NAME.replace("/", "__")
+        return cache_dir / "sentence_transformer" / model_cache_name / corpus_name
+    raise ValueError(f"Unsupported projection retrieval type: {retrieval_type}")
+
+
+def load_embedding_model(retrieval_type: str, device: str):
+    if retrieval_type == "bert":
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=True)
+        model = AutoModel.from_pretrained(MODEL_NAME).to(device)
+        return tokenizer, model
+    if retrieval_type == "sentence_transformer":
+        model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL_NAME, device=device)
+        return None, model
+    raise ValueError(f"Unsupported projection retrieval type: {retrieval_type}")
+
+
+def embed_reference_texts(
+    texts: list[str],
+    retrieval_type: str,
+    tokenizer: Any,
+    model: Any,
+    device: str,
+    batch_size: int,
+) -> np.ndarray:
+    if retrieval_type == "bert":
+        return embed_texts(
+            texts,
+            tokenizer=tokenizer,
+            model=model,
+            device=device,
+            batch_size=batch_size,
+        )
+    if retrieval_type == "sentence_transformer":
+        return embed_texts_sentence_transformer(texts, model=model, batch_size=batch_size)
+    raise ValueError(f"Unsupported projection retrieval type: {retrieval_type}")
+
+
 def load_catalog_metadata() -> dict[str, dict[str, Any]]:
     dataset = load_dataset(DATASET_NAME)
     full_dataset = concatenate_datasets([dataset[split] for split in SPLIT_TYPES])
@@ -167,6 +227,8 @@ def build_catalog_rows(
         rows.append(
             {
                 "point_type": "catalog",
+                "projection_retrieval_type": "",
+                "projection_corpus_types": "",
                 "session_id": "",
                 "turn_number": "",
                 "gemini_reference_rank": "",
@@ -215,10 +277,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Create Streamlit PCA data for Gemini reference embeddings.")
     parser.add_argument("--cache_dir", default="./cache", help="Repository cache directory.")
     parser.add_argument(
+        "--projection_retrieval_type",
+        choices=["bert", "sentence_transformer"],
+        default="bert",
+        help="Embedding cache/model used for the PCA projection.",
+    )
+    parser.add_argument(
         "--corpus_types",
         nargs="+",
         default=["track_name", "artist_name", "album_name", "tag_list", "release_date"],
-        help="BERT corpus fields matching the embedding cache.",
+        help="Corpus fields matching the embedding cache.",
     )
     parser.add_argument(
         "--gemini_cache_dir",
@@ -245,14 +313,18 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    corpus_name = "_".join(args.corpus_types)
-    bert_cache_dir = Path(args.cache_dir) / "bert" / corpus_name
-    embeddings_path = bert_cache_dir / "embeddings.pt"
-    track_ids_path = bert_cache_dir / "track_ids.json"
+    index_dir = get_index_dir(
+        cache_dir=Path(args.cache_dir),
+        retrieval_type=args.projection_retrieval_type,
+        corpus_types=args.corpus_types,
+    )
+    embeddings_path = index_dir / "embeddings.pt"
+    track_ids_path = index_dir / "track_ids.json"
 
     if not embeddings_path.exists() or not track_ids_path.exists():
         raise FileNotFoundError(
-            f"Missing BERT cache in {bert_cache_dir}. Run BERT retrieval once with matching corpus_types first."
+            f"Missing embedding cache in {index_dir}. "
+            "Run retrieval once with matching retrieval_type and corpus_types first."
         )
 
     catalog_embeddings = torch.load(embeddings_path, map_location="cpu").numpy()
@@ -265,11 +337,16 @@ def main() -> None:
 
     metadata = load_catalog_metadata()
     catalog_rows = build_catalog_rows(track_ids, catalog_coords, metadata)
+    for row in catalog_rows:
+        row["projection_retrieval_type"] = args.projection_retrieval_type
+        row["projection_corpus_types"] = ", ".join(args.corpus_types)
     catalog_rows_by_id = {row["track_id"]: row for row in catalog_rows}
 
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=True)
-    model = AutoModel.from_pretrained(MODEL_NAME).to(device)
+    tokenizer, model = load_embedding_model(
+        retrieval_type=args.projection_retrieval_type,
+        device=device,
+    )
 
     gemini_rows = []
     gemini_texts = []
@@ -288,6 +365,8 @@ def main() -> None:
             gemini_rows.append(
                 {
                     "point_type": "gemini_reference",
+                    "projection_retrieval_type": args.projection_retrieval_type,
+                    "projection_corpus_types": ", ".join(args.corpus_types),
                     "session_id": session_id,
                     "turn_number": turn_number,
                     "gemini_reference_rank": rank,
@@ -305,8 +384,9 @@ def main() -> None:
 
     retrieved_rows = []
     if gemini_texts:
-        gemini_embeddings = embed_texts(
+        gemini_embeddings = embed_reference_texts(
             gemini_texts,
+            retrieval_type=args.projection_retrieval_type,
             tokenizer=tokenizer,
             model=model,
             device=device,
@@ -340,6 +420,8 @@ def main() -> None:
     pd.DataFrame(output_rows).to_csv(output_path, index=False, encoding="utf-8")
 
     print(f"Saved {len(output_rows)} points to {output_path}")
+    print(f"Projection retrieval type: {args.projection_retrieval_type}")
+    print(f"Corpus fields: {args.corpus_types}")
     print(f"PCA explained variance ratio: {pca.explained_variance_ratio_}")
 
 

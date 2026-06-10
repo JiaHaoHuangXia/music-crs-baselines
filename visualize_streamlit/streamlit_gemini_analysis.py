@@ -1137,7 +1137,7 @@ def render_devset_comparison(df, conversation_details):
 def render_embedding_map(df, conversation_details):
     render_header(
         "Devset Embedding Map",
-        "Place Gemini-generated reference tracks inside the BERT catalog embedding space.",
+        "Place Gemini-generated reference tracks inside the catalog embedding space.",
     )
     if df.empty:
         st.warning("Embedding projection data was not found.")
@@ -1153,7 +1153,7 @@ def render_embedding_map(df, conversation_details):
 
     st.markdown(
         """
-        **How to read this page.** The gray cloud is the real challenge catalog projected from BERT embeddings
+        **How to read this page.** The gray cloud is the real challenge catalog projected from retrieval embeddings
         into two PCA dimensions. The highlighted points show the selected turn's ground-truth track and the five
         Gemini-generated reference tracks. If the Gemini points are far from the ground truth, that is visual evidence
         of query drift.
@@ -1178,6 +1178,22 @@ def render_embedding_map(df, conversation_details):
     if gemini_df.empty:
         st.info("No Gemini reference points are available in the projection CSV.")
         return
+
+    projection_type = (
+        df["projection_retrieval_type"].dropna().astype(str).iloc[0]
+        if "projection_retrieval_type" in df.columns and not df["projection_retrieval_type"].dropna().empty
+        else "unknown"
+    )
+    projection_fields = (
+        df["projection_corpus_types"].dropna().astype(str).iloc[0]
+        if "projection_corpus_types" in df.columns and not df["projection_corpus_types"].dropna().empty
+        else "unknown"
+    )
+    projection_label = {
+        "bert": "BERT",
+        "sentence_transformer": "MiniLM sentence-transformer",
+    }.get(projection_type, projection_type)
+    st.caption(f"Projection: {projection_label}. Corpus fields: {projection_fields}.")
 
     session_options = sorted(gemini_df["session_id"].dropna().unique())
     selected_session = st.sidebar.selectbox(
@@ -1401,7 +1417,7 @@ def render_embedding_map(df, conversation_details):
         )
 
     fig.update_layout(
-        title="PCA map of BERT metadata embeddings",
+        title=f"PCA map of {projection_label} metadata embeddings",
         height=660,
         xaxis_title="PCA component 1",
         yaxis_title="PCA component 2",
