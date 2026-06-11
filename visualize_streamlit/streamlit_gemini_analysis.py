@@ -1299,12 +1299,11 @@ def render_embedding_map(df, conversation_details):
             name="Catalog tracks",
             marker=dict(size=4, color="#c7cbd1", opacity=0.28),
             text=visible_catalog["track_name"] + " - " + visible_catalog["artist_name"],
-            customdata=visible_catalog[["album_name", "broad_genre", "tag_list"]],
+            customdata=visible_catalog[["album_name", "broad_genre"]],
             hovertemplate=(
                 "<b>%{text}</b><br>"
                 "Album: %{customdata[0]}<br>"
-                "Genre group: %{customdata[1]}<br>"
-                "Tags: %{customdata[2]}<extra></extra>"
+                "Genre group: %{customdata[1]}<extra></extra>"
             ),
         )
     )
@@ -1318,11 +1317,10 @@ def render_embedding_map(df, conversation_details):
                 name="Ground-truth track",
                 marker=dict(size=18, color="#2364aa", symbol="star", line=dict(width=1, color="#ffffff")),
                 text=turn_ground_truth["track_name"] + " - " + turn_ground_truth["artist_name"],
-                customdata=turn_ground_truth[["album_name", "tag_list"]],
+                customdata=turn_ground_truth[["album_name"]],
                 hovertemplate=(
                     "<b>%{text}</b><br>"
-                    "Album: %{customdata[0]}<br>"
-                    "Tags: %{customdata[1]}<extra></extra>"
+                    "Album: %{customdata[0]}<extra></extra>"
                 ),
             )
         )
@@ -1344,13 +1342,12 @@ def render_embedding_map(df, conversation_details):
                 text=final_recommendations_df["rank"].astype(str),
                 textposition="bottom center",
                 customdata=final_recommendations_df[
-                    ["rank", "track_name", "artist_name", "album_name", "tag_list"]
+                    ["rank", "track_name", "artist_name", "album_name"]
                 ],
                 hovertemplate=(
                     "<b>Final recommendation #%{customdata[0]}</b><br>"
                     "%{customdata[1]} - %{customdata[2]}<br>"
-                    "Album: %{customdata[3]}<br>"
-                    "Tags: %{customdata[4]}<extra></extra>"
+                    "Album: %{customdata[3]}<extra></extra>"
                 ),
             )
         )
@@ -1383,7 +1380,6 @@ def render_embedding_map(df, conversation_details):
                             "gemini_reference_track",
                             "retrieved_rank_key",
                             "cosine_similarity",
-                            "tag_list",
                         ]
                     ],
                     hovertemplate=(
@@ -1391,8 +1387,7 @@ def render_embedding_map(df, conversation_details):
                         "Album: %{customdata[2]}<br>"
                         "From Gemini: %{customdata[3]}<br>"
                         "Retrieved rank for that Gemini track: %{customdata[4]}<br>"
-                        "Cosine similarity: %{customdata[5]:.4f}<br>"
-                        "Tags: %{customdata[6]}<extra></extra>"
+                        "Cosine similarity: %{customdata[5]:.4f}<extra></extra>"
                     ),
                 )
             )
@@ -1406,12 +1401,11 @@ def render_embedding_map(df, conversation_details):
                 marker=dict(size=16, color=color, symbol="diamond", line=dict(width=1, color="#ffffff")),
                 text=reference_gemini["gemini_reference_rank_key"],
                 textposition="top center",
-                customdata=reference_gemini[["track_name", "artist_name", "album_name", "tag_list"]],
+                customdata=reference_gemini[["track_name", "artist_name", "album_name"]],
                 hovertemplate=(
                     "<b>Gemini reference %{text}</b><br>"
                     "%{customdata[0]} - %{customdata[1]}<br>"
-                    "Album: %{customdata[2]}<br>"
-                    "Tags: %{customdata[3]}<extra></extra>"
+                    "Album: %{customdata[2]}<extra></extra>"
                 ),
             )
         )
