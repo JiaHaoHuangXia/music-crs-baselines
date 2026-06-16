@@ -1134,6 +1134,325 @@ def render_devset_comparison(df, conversation_details):
     st.dataframe(per_reference, width="stretch", hide_index=True)
 
 
+def build_oracle_rows(ground_truth_df, retrieved_df, k_values):
+    if ground_truth_df.empty or retrieved_df.empty:
+        return pd.DataFrame()
+
+    retrieved = retrieved_df.copy()
+    retrieved["retrieved_rank_number"] = pd.to_numeric(
+        retrieved["retrieved_rank"],
+        errors="coerce",
+    )
+    ground_truth = ground_truth_df[
+        ["session_id", "turn_number_key", "track_id", "track_name", "artist_name"]
+    ].rename(
+        columns={
+            "track_id": "ground_truth_track_id",
+            "track_name": "ground_truth_track",
+            "artist_name": "ground_truth_artist",
+        }
+    )
+    joined = retrieved.merge(
+        ground_truth,
+        on=["session_id", "turn_number_key"],
+        how="inner",
+    )
+    joined["is_ground_truth_neighbor"] = (
+        joined["track_id"] == joined["ground_truth_track_id"]
+    )
+
+    rows = []
+    total_turns = ground_truth[["session_id", "turn_number_key"]].drop_duplicates().shape[0]
+    for k in k_values:
+        within_k = joined[joined["retrieved_rank_number"] <= k]
+        hit_turns = (
+            within_k[within_k["is_ground_truth_neighbor"]]
+            [["session_id", "turn_number_key"]]
+            .drop_duplicates()
+            .shape[0]
+        )
+        rows.append(
+            {
+                "k": k,
+                "hit_turns": hit_turns,
+                "miss_turns": total_turns - hit_turns,
+                "total_turns": total_turns,
+                "hit_rate": hit_turns / total_turns if total_turns else 0.0,
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def normalize_match_value(value):
+    return str(value or "").strip().lower()
+
+
+def build_miss_breakdown_rows(ground_truth_df, gemini_df, retrieved_df, k):
+    if ground_truth_df.empty or gemini_df.empty or retrieved_df.empty:
+        return pd.DataFrame()
+
+    retrieved = retrieved_df.copy()
+    retrieved["retrieved_rank_number"] = pd.to_numeric(
+        retrieved["retrieved_rank"],
+        errors="coerce",
+    )
+    retrieved = retrieved[retrieved["retrieved_rank_number"] <= k]
+
+    ground_truth = ground_truth_df[
+        ["session_id", "turn_number_key", "track_id", "track_name", "artist_name", "album_name"]
+    ].rename(
+        columns={
+            "track_id": "ground_truth_track_id",
+            "track_name": "ground_truth_track",
+            "artist_name": "ground_truth_artist",
+            "album_name": "ground_truth_album",
+        }
+    )
+    retrieved_with_truth = retrieved.merge(
+        ground_truth[["session_id", "turn_number_key", "ground_truth_track_id"]],
+        on=["session_id", "turn_number_key"],
+        how="inner",
+    )
+    found_turns = set(
+        retrieved_with_truth[retrieved_with_truth["track_id"] == retrieved_with_truth["ground_truth_track_id"]]
+        .apply(lambda row: (row["session_id"], row["turn_number_key"]), axis=1)
+        .tolist()
+    )
+
+    gemini = gemini_df[
+        ["session_id", "turn_number_key", "track_name", "artist_name", "album_name"]
+    ].rename(
+        columns={
+            "track_name": "gemini_track",
+            "artist_name": "gemini_artist",
+            "album_name": "gemini_album",
+        }
+    )
+    joined = ground_truth.merge(gemini, on=["session_id", "turn_number_key"], how="left")
+    joined["turn_key"] = list(zip(joined["session_id"], joined["turn_number_key"]))
+    misses = joined[~joined["turn_key"].isin(found_turns)].copy()
+
+    if misses.empty:
+        return pd.DataFrame()
+
+    misses["same_track_title"] = (
+        misses["ground_truth_track"].map(normalize_match_value)
+        == misses["gemini_track"].map(normalize_match_value)
+    )
+    misses["same_artist"] = (
+        misses["ground_truth_artist"].map(normalize_match_value)
+        == misses["gemini_artist"].map(normalize_match_value)
+    )
+    misses["same_album"] = (
+        misses["ground_truth_album"].map(normalize_match_value)
+        == misses["gemini_album"].map(normalize_match_value)
+    )
+
+    rows = []
+    for (_, _), group in misses.groupby(["session_id", "turn_number_key"]):
+        exact_title_and_artist = bool((group["same_track_title"] & group["same_artist"]).any())
+        same_artist_and_album = bool((group["same_artist"] & group["same_album"]).any())
+        same_artist = bool(group["same_artist"].any())
+        same_album = bool(group["same_album"].any())
+
+        if exact_title_and_artist:
+            category = "Gemini named the target, but retrieval still missed it"
+        elif same_artist_and_album:
+            category = "Same artist and album"
+        elif same_artist:
+            category = "Same artist only"
+        elif same_album:
+            category = "Same album only"
+        else:
+            category = "Different artist and album"
+
+        rows.append({"miss_reason": category})
+
+    order = [
+        "Gemini named the target, but retrieval still missed it",
+        "Same artist and album",
+        "Same artist only",
+        "Same album only",
+        "Different artist and album",
+    ]
+    breakdown = (
+        pd.DataFrame(rows)
+        .value_counts("miss_reason")
+        .rename("turns")
+        .reset_index()
+    )
+    breakdown["miss_reason"] = pd.Categorical(
+        breakdown["miss_reason"],
+        categories=order,
+        ordered=True,
+    )
+    breakdown = breakdown.sort_values("miss_reason")
+    breakdown["share_of_misses"] = breakdown["turns"] / breakdown["turns"].sum()
+    return breakdown
+
+
+def render_oracle_check(ground_truth_df, gemini_df, retrieved_df, selected_session, selected_turn):
+    st.markdown("#### Can Gemini's Reference Songs Find The Correct Track?")
+    st.markdown(
+        """
+        For each conversation turn, Gemini generated 5 reference songs. For each reference song, we retrieved
+        the closest catalog tracks. This diagnostic checks whether the true target track appeared anywhere in
+        those candidates. If it did not appear here, a later ranking or fusion step cannot recommend it.
+        """
+    )
+
+    if ground_truth_df.empty or retrieved_df.empty:
+        st.info("Oracle data is not available. Regenerate the embedding projection with retrieved-track highlights.")
+        return
+
+    max_rank = int(pd.to_numeric(retrieved_df["retrieved_rank"], errors="coerce").max())
+    candidate_k_values = [1, 5, 10, 20, 50, 100, 200]
+    k_values = [k for k in candidate_k_values if k <= max_rank]
+    if max_rank not in k_values:
+        k_values.append(max_rank)
+    k_values = sorted(set(k_values))
+
+    oracle_df = build_oracle_rows(ground_truth_df, retrieved_df, k_values)
+    if oracle_df.empty:
+        st.info("Oracle data could not be calculated from the current projection file.")
+        return
+
+    latest_k = int(oracle_df["k"].max())
+    latest_row = oracle_df[oracle_df["k"] == latest_k].iloc[0]
+    hit_turns = int(latest_row["hit_turns"])
+    total_turns = int(latest_row["total_turns"])
+    miss_turns = int(latest_row["miss_turns"])
+    hit_rate = float(latest_row["hit_rate"])
+    miss_rate = 1.0 - hit_rate
+
+    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+    metric_col1.metric("Evaluated turns", f"{total_turns}")
+    metric_col2.metric("Target found", f"{hit_turns}")
+    metric_col3.metric("Target missed", f"{miss_turns}")
+    metric_col4.metric("Upper-limit success", f"{hit_rate:.1%}")
+
+    found_missed = pd.DataFrame(
+        [
+            {"result": "Found target", "turns": hit_turns, "share": hit_rate},
+            {"result": "Missed target", "turns": miss_turns, "share": miss_rate},
+        ]
+    )
+    fig = go.Figure()
+    for row in found_missed.itertuples(index=False):
+        color = "#2f9e67" if row.result == "Found target" else "#d9dee7"
+        fig.add_trace(
+            go.Bar(
+                y=["Gemini reference retrieval"],
+                x=[row.share],
+                name=row.result,
+                orientation="h",
+                marker=dict(color=color),
+                customdata=[[row.turns, row.share]],
+                text=[f"{row.result}: {row.share:.1%}"],
+                textposition="inside",
+                hovertemplate=(
+                    f"<b>{row.result}</b><br>"
+                    "Turns: %{customdata[0]}<br>"
+                    "Share: %{customdata[1]:.1%}<extra></extra>"
+                ),
+            )
+        )
+    fig.update_layout(
+        barmode="stack",
+        height=220,
+        xaxis_title=f"Share of turns after checking 5 x top {latest_k} nearest tracks",
+        yaxis_title="",
+        yaxis_tickformat=".0%",
+        xaxis=dict(range=[0, 1], tickformat=".0%"),
+        legend_title="Result",
+        margin=dict(l=10, r=10, t=20, b=40),
+    )
+    st.plotly_chart(fig, width="stretch")
+    st.caption(
+        f"Interpretation: with the current exported data, Gemini's 5 reference songs found the correct track "
+        f"for {hit_turns} of {total_turns} turns after checking the top {latest_k} nearest catalog matches "
+        "for each reference song. This is an upper-limit diagnostic, not the final recommender score."
+    )
+
+    st.markdown("##### Why Did The Missed Turns Fail?")
+    st.caption(
+        "This breakdown uses only the metadata fields used by the latest embedding model: track name, artist name, "
+        "and album name."
+    )
+    miss_breakdown = build_miss_breakdown_rows(ground_truth_df, gemini_df, retrieved_df, latest_k)
+    if miss_breakdown.empty:
+        st.info("There are no missed turns to break down in the current exported data.")
+    else:
+        st.dataframe(
+            miss_breakdown.assign(
+                share_of_misses=miss_breakdown["share_of_misses"].map(lambda value: f"{value:.1%}")
+            ),
+            width="stretch",
+            hide_index=True,
+        )
+
+    turn_ground_truth = ground_truth_df[
+        (ground_truth_df["session_id"] == selected_session)
+        & (ground_truth_df["turn_number_key"] == selected_turn)
+    ].copy()
+    turn_retrieved = retrieved_df[
+        (retrieved_df["session_id"] == selected_session)
+        & (retrieved_df["turn_number_key"] == selected_turn)
+    ].copy()
+
+    if turn_ground_truth.empty or turn_retrieved.empty:
+        return
+
+    gt_row = turn_ground_truth.iloc[0]
+    gt_track_id = gt_row["track_id"]
+    turn_retrieved["retrieved_rank_number"] = pd.to_numeric(
+        turn_retrieved["retrieved_rank"],
+        errors="coerce",
+    )
+    hits = turn_retrieved[turn_retrieved["track_id"] == gt_track_id].copy()
+
+    if hits.empty:
+        st.warning(
+            "For this selected turn, the ground-truth track does not appear in the exported nearest neighbors "
+            "of any Gemini reference."
+        )
+    else:
+        best_hit = hits.sort_values("retrieved_rank_number").iloc[0]
+        st.success(
+            "For this selected turn, Gemini can reach the ground-truth track: "
+            f"{gt_row['track_name']} by {gt_row['artist_name']} appears at nearest-neighbor rank "
+            f"{int(best_hit['retrieved_rank_number'])} from Gemini reference {best_hit['gemini_reference_rank_key']}."
+        )
+
+    reference_summary = (
+        turn_retrieved.assign(is_ground_truth=turn_retrieved["track_id"] == gt_track_id)
+        .groupby("gemini_reference_rank_key", as_index=False)
+        .agg(
+            best_ground_truth_rank=(
+                "retrieved_rank_number",
+                lambda values: int(values.min()) if len(values) else None,
+            ),
+            contains_ground_truth=("is_ground_truth", "max"),
+        )
+    )
+    reference_summary = reference_summary.rename(
+        columns={
+            "gemini_reference_rank_key": "gemini_reference",
+            "contains_ground_truth": "target_found",
+        }
+    )
+    if not hits.empty:
+        hit_rank_by_reference = hits.groupby("gemini_reference_rank_key")["retrieved_rank_number"].min()
+        reference_summary["best_ground_truth_rank"] = reference_summary["gemini_reference"].map(
+            hit_rank_by_reference
+        )
+    else:
+        reference_summary["best_ground_truth_rank"] = None
+    reference_summary["best_ground_truth_rank"] = reference_summary["best_ground_truth_rank"].fillna("not found")
+    st.dataframe(reference_summary, width="stretch", hide_index=True)
+
+
 def render_embedding_map(df, conversation_details):
     render_header(
         "Devset Embedding Map",
@@ -1256,6 +1575,8 @@ def render_embedding_map(df, conversation_details):
         visible_retrieved["gemini_reference_track"] = visible_retrieved["gemini_reference_rank_key"].map(
             reference_label_by_rank
         )
+
+    render_oracle_check(ground_truth_df, gemini_df, retrieved_df, selected_session, selected_turn)
 
     selected_detail = conversation_details.get((selected_session, int(selected_turn)))
     final_recommendations = []
