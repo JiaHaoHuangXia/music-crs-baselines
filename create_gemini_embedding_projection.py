@@ -1,5 +1,5 @@
 """
-Create a PCA map of catalog embeddings and Gemini reference embeddings.
+Create a UMAP map of catalog embeddings and Gemini reference embeddings.
 
 This script is intended to be run offline after the matching retrieval embedding
 cache exists. It writes a CSV that Streamlit can load without initializing an
@@ -14,9 +14,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-# Import sklearn before torch on Windows to avoid occasional DLL/import issues.
-from sklearn.decomposition import PCA
+# Import sklearn/umap before torch on Windows to avoid occasional DLL/import issues.
 from sklearn.preprocessing import normalize
+from umap import UMAP
 
 import torch
 import torch.nn.functional as F
@@ -227,6 +227,7 @@ def build_catalog_rows(
         rows.append(
             {
                 "point_type": "catalog",
+                "projection_method": "",
                 "projection_retrieval_type": "",
                 "projection_corpus_types": "",
                 "session_id": "",
@@ -241,8 +242,8 @@ def build_catalog_rows(
                 "tag_list": tag_list,
                 "release_date": field_to_text(item.get("release_date", "")),
                 "broad_genre": assign_broad_genre(tag_list),
-                "pca_x": coords[idx, 0],
-                "pca_y": coords[idx, 1],
+                "umap_x": coords[idx, 0],
+                "umap_y": coords[idx, 1],
             }
         )
     return rows
@@ -274,13 +275,13 @@ def build_ground_truth_rows(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Create Streamlit PCA data for Gemini reference embeddings.")
+    parser = argparse.ArgumentParser(description="Create Streamlit UMAP data for Gemini reference embeddings.")
     parser.add_argument("--cache_dir", default="./cache", help="Repository cache directory.")
     parser.add_argument(
         "--projection_retrieval_type",
         choices=["bert", "sentence_transformer"],
         default="bert",
-        help="Embedding cache/model used for the PCA projection.",
+        help="Embedding cache/model used for the UMAP projection.",
     )
     parser.add_argument(
         "--corpus_types",
@@ -308,7 +309,7 @@ def main() -> None:
     parser.add_argument(
         "--topk_retrieved_per_reference",
         type=int,
-        default=10,
+        default=20,
         help="Number of nearest catalog tracks to highlight for each Gemini reference.",
     )
     args = parser.parse_args()
@@ -332,12 +333,20 @@ def main() -> None:
         track_ids = json.load(file)
 
     catalog_embeddings = normalize(catalog_embeddings)
-    pca = PCA(n_components=2, random_state=RANDOM_SEED)
-    catalog_coords = pca.fit_transform(catalog_embeddings)
+    reducer = UMAP(
+        n_components=2,
+        n_neighbors=30,
+        min_dist=0.05,
+        metric="cosine",
+        random_state=RANDOM_SEED,
+        transform_seed=RANDOM_SEED,
+    )
+    catalog_coords = reducer.fit_transform(catalog_embeddings)
 
     metadata = load_catalog_metadata()
     catalog_rows = build_catalog_rows(track_ids, catalog_coords, metadata)
     for row in catalog_rows:
+        row["projection_method"] = "umap"
         row["projection_retrieval_type"] = args.projection_retrieval_type
         row["projection_corpus_types"] = ", ".join(args.corpus_types)
     catalog_rows_by_id = {row["track_id"]: row for row in catalog_rows}
@@ -365,6 +374,7 @@ def main() -> None:
             gemini_rows.append(
                 {
                     "point_type": "gemini_reference",
+                    "projection_method": "umap",
                     "projection_retrieval_type": args.projection_retrieval_type,
                     "projection_corpus_types": ", ".join(args.corpus_types),
                     "session_id": session_id,
@@ -393,10 +403,10 @@ def main() -> None:
             batch_size=args.batch_size,
         )
         gemini_embeddings = normalize(gemini_embeddings)
-        gemini_coords = pca.transform(gemini_embeddings)
+        gemini_coords = reducer.transform(gemini_embeddings)
         for idx, row in enumerate(gemini_rows):
-            row["pca_x"] = gemini_coords[idx, 0]
-            row["pca_y"] = gemini_coords[idx, 1]
+            row["umap_x"] = gemini_coords[idx, 0]
+            row["umap_y"] = gemini_coords[idx, 1]
 
         similarities = np.matmul(gemini_embeddings, catalog_embeddings.T)
         topk = min(args.topk_retrieved_per_reference, similarities.shape[1])
@@ -420,9 +430,9 @@ def main() -> None:
     pd.DataFrame(output_rows).to_csv(output_path, index=False, encoding="utf-8")
 
     print(f"Saved {len(output_rows)} points to {output_path}")
+    print("Projection method: UMAP")
     print(f"Projection retrieval type: {args.projection_retrieval_type}")
     print(f"Corpus fields: {args.corpus_types}")
-    print(f"PCA explained variance ratio: {pca.explained_variance_ratio_}")
 
 
 if __name__ == "__main__":

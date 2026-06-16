@@ -54,7 +54,7 @@ def main() -> None:
     parser.add_argument(
         "--topk_retrieved_per_reference",
         type=int,
-        default=10,
+        default=20,
         help="Nearest catalog tracks to highlight for each Gemini reference in the embedding map.",
     )
     parser.add_argument(

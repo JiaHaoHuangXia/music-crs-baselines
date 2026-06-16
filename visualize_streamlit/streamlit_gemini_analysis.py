@@ -1473,9 +1473,13 @@ def render_embedding_map(df, conversation_details):
     st.markdown(
         """
         **How to read this page.** The gray cloud is the real challenge catalog projected from retrieval embeddings
-        into two PCA dimensions. The highlighted points show the selected turn's ground-truth track and the five
+        into two UMAP dimensions. The highlighted points show the selected turn's ground-truth track and the five
         Gemini-generated reference tracks. If the Gemini points are far from the ground truth, that is visual evidence
         of query drift.
+
+        UMAP is used because this page focuses on local neighborhoods: whether Gemini references, retrieved tracks,
+        final recommendations, and ground-truth tracks appear near each other. Retrieval is still computed in the
+        original embedding space, not directly from this 2D map.
 
         The final top-20 recommendations, Gemini references, and embedding projection are loaded from exported
         dashboard files. After running a new model, refresh those files with `refresh_streamlit_artifacts.py`
@@ -1512,7 +1516,17 @@ def render_embedding_map(df, conversation_details):
         "bert": "BERT",
         "sentence_transformer": "MiniLM sentence-transformer",
     }.get(projection_type, projection_type)
-    st.caption(f"Projection: {projection_label}. Corpus fields: {projection_fields}.")
+    projection_method = (
+        df["projection_method"].dropna().astype(str).iloc[0]
+        if "projection_method" in df.columns and not df["projection_method"].dropna().empty
+        else "umap" if {"umap_x", "umap_y"}.issubset(df.columns) else "pca"
+    )
+    x_coord = "umap_x" if "umap_x" in df.columns else "pca_x"
+    y_coord = "umap_y" if "umap_y" in df.columns else "pca_y"
+    projection_method_label = projection_method.upper()
+    st.caption(
+        f"Projection: {projection_method_label} using {projection_label}. Corpus fields: {projection_fields}."
+    )
 
     session_options = sorted(gemini_df["session_id"].dropna().unique())
     selected_session = st.sidebar.selectbox(
@@ -1595,8 +1609,8 @@ def render_embedding_map(df, conversation_details):
                     "artist_name": track.get("artist_name", catalog_row["artist_name"]),
                     "album_name": track.get("album_name", catalog_row["album_name"]),
                     "tag_list": catalog_row["tag_list"],
-                    "pca_x": catalog_row["pca_x"],
-                    "pca_y": catalog_row["pca_y"],
+                    x_coord: catalog_row[x_coord],
+                    y_coord: catalog_row[y_coord],
                 }
             )
     final_recommendations_df = pd.DataFrame(final_recommendations)
@@ -1614,8 +1628,8 @@ def render_embedding_map(df, conversation_details):
     fig = go.Figure()
     fig.add_trace(
         go.Scattergl(
-            x=visible_catalog["pca_x"],
-            y=visible_catalog["pca_y"],
+            x=visible_catalog[x_coord],
+            y=visible_catalog[y_coord],
             mode="markers",
             name="Catalog tracks",
             marker=dict(size=4, color="#c7cbd1", opacity=0.28),
@@ -1632,8 +1646,8 @@ def render_embedding_map(df, conversation_details):
     if not turn_ground_truth.empty:
         fig.add_trace(
             go.Scatter(
-                x=turn_ground_truth["pca_x"],
-                y=turn_ground_truth["pca_y"],
+                x=turn_ground_truth[x_coord],
+                y=turn_ground_truth[y_coord],
                 mode="markers",
                 name="Ground-truth track",
                 marker=dict(size=18, color="#2364aa", symbol="star", line=dict(width=1, color="#ffffff")),
@@ -1649,8 +1663,8 @@ def render_embedding_map(df, conversation_details):
     if not final_recommendations_df.empty:
         fig.add_trace(
             go.Scatter(
-                x=final_recommendations_df["pca_x"],
-                y=final_recommendations_df["pca_y"],
+                x=final_recommendations_df[x_coord],
+                y=final_recommendations_df[y_coord],
                 mode="markers+text",
                 name="Final top-20 recommendations",
                 marker=dict(
@@ -1683,8 +1697,8 @@ def render_embedding_map(df, conversation_details):
         if not reference_retrieved.empty:
             fig.add_trace(
                 go.Scatter(
-                    x=reference_retrieved["pca_x"],
-                    y=reference_retrieved["pca_y"],
+                    x=reference_retrieved[x_coord],
+                    y=reference_retrieved[y_coord],
                     mode="markers",
                     name=f"Retrieved from {reference_label}",
                     marker=dict(
@@ -1715,8 +1729,8 @@ def render_embedding_map(df, conversation_details):
 
         fig.add_trace(
             go.Scatter(
-                x=reference_gemini["pca_x"],
-                y=reference_gemini["pca_y"],
+                x=reference_gemini[x_coord],
+                y=reference_gemini[y_coord],
                 mode="markers+text",
                 name=reference_label,
                 marker=dict(size=16, color=color, symbol="diamond", line=dict(width=1, color="#ffffff")),
@@ -1732,10 +1746,10 @@ def render_embedding_map(df, conversation_details):
         )
 
     fig.update_layout(
-        title=f"PCA map of {projection_label} metadata embeddings",
+        title=f"{projection_method_label} map of {projection_label} metadata embeddings",
         height=660,
-        xaxis_title="PCA component 1",
-        yaxis_title="PCA component 2",
+        xaxis_title=f"{projection_method_label} dimension 1",
+        yaxis_title=f"{projection_method_label} dimension 2",
         legend_title="Gemini source",
     )
     st.plotly_chart(fig, width="stretch")
@@ -1771,7 +1785,7 @@ def render_embedding_map(df, conversation_details):
 
     st.markdown("#### Final Top-20 Recommendations")
     st.caption(
-        "These are the final model recommendations shown in the Devset Case Study page, projected onto the same PCA map."
+        f"These are the final model recommendations shown in the Devset Case Study page, projected onto the same {projection_method_label} map."
     )
     if final_recommendations_df.empty:
         st.info("No final recommendation details are available for this selected turn.")
@@ -1788,54 +1802,62 @@ def render_embedding_map(df, conversation_details):
         )
         st.dataframe(final_table, width="stretch", hide_index=True, height=360)
 
-    st.markdown("#### BERT Nearest Tracks For Each Gemini Reference")
+    st.markdown(f"#### {projection_label} Nearest Tracks For Each Gemini Reference")
     st.caption(
-        "These are diagnostic nearest-neighbor tracks around each Gemini reference, not the final recommendation list."
+        "Each table shows the catalog tracks retrieved from one Gemini-generated reference song before fusion."
     )
     if visible_retrieved.empty:
         st.info(
             "No retrieved-track highlights are available. Regenerate the projection CSV with the updated script."
         )
     else:
-        retrieved_table = visible_retrieved[
-            [
-                "gemini_reference_rank_key",
-                "gemini_reference_track",
-                "retrieved_rank_key",
-                "cosine_similarity",
-                "track_name",
-                "artist_name",
-                "album_name",
-                "tag_list",
-            ]
-        ].rename(
-            columns={
-                "gemini_reference_rank_key": "gemini_reference",
-                "gemini_reference_track": "source_gemini_track",
-                "retrieved_rank_key": "retrieved_rank",
-                "track_name": "track",
-                "artist_name": "artist",
-                "album_name": "album",
-                "tag_list": "tags",
-            }
-        )
-        retrieved_table["_gemini_reference_sort"] = pd.to_numeric(
-            retrieved_table["gemini_reference"],
-            errors="coerce",
-        )
-        retrieved_table["_retrieved_rank_sort"] = pd.to_numeric(
-            retrieved_table["retrieved_rank"],
-            errors="coerce",
-        )
-        retrieved_table = retrieved_table.sort_values(
-            ["_gemini_reference_sort", "_retrieved_rank_sort"]
-        ).drop(columns=["_gemini_reference_sort", "_retrieved_rank_sort"])
-        st.dataframe(
-            retrieved_table,
-            width="stretch",
-            hide_index=True,
-            height=360,
-        )
+        target_track_id = None
+        if not turn_ground_truth.empty:
+            target_track_id = turn_ground_truth.iloc[0]["track_id"]
+
+        for reference_rank, reference_rows in visible_retrieved.groupby("gemini_reference_rank_key"):
+            reference_rows = reference_rows.copy()
+            reference_rows["_retrieved_rank_sort"] = pd.to_numeric(
+                reference_rows["retrieved_rank_key"],
+                errors="coerce",
+            )
+            reference_rows = reference_rows.sort_values("_retrieved_rank_sort")
+            reference_label = reference_label_by_rank.get(
+                str(reference_rank),
+                f"{reference_rank}. Gemini reference",
+            )
+            found_rows = reference_rows[reference_rows["track_id"] == target_track_id]
+            if target_track_id is not None and not found_rows.empty:
+                found_rank = int(found_rows["_retrieved_rank_sort"].min())
+                status = f"target found at rank {found_rank}"
+            else:
+                status = "target not found"
+
+            with st.expander(f"{reference_label} - {status}", expanded=(selected_reference != "All")):
+                table = reference_rows[
+                    [
+                        "retrieved_rank_key",
+                        "cosine_similarity",
+                        "track_name",
+                        "artist_name",
+                        "album_name",
+                        "tag_list",
+                    ]
+                ].rename(
+                    columns={
+                        "retrieved_rank_key": "retrieved_rank",
+                        "track_name": "track",
+                        "artist_name": "artist",
+                        "album_name": "album",
+                        "tag_list": "tags",
+                    }
+                )
+                st.dataframe(
+                    table,
+                    width="stretch",
+                    hide_index=True,
+                    height=min(420, 84 + 36 * len(table)),
+                )
 
 
 def render_global_gemini(df):
