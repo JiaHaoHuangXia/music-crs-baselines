@@ -1,0 +1,429 @@
+{
+  "dataset_name": "talkpl-ai/TalkPlayData-Challenge-Track-Metadata",
+  "splits": [
+    "all_tracks"
+  ],
+  "min_frequency": 25,
+  "max_tags": 400,
+  "max_words": 4,
+  "min_vocab_similarity": 0.58,
+  "method": "frequency + tag-shape rules + character-ngram similarity to controlled music vocabulary",
+  "rejected_counts": {
+    "noise": 304,
+    "low_vocab_similarity": 4220,
+    "bad_shape": 275,
+    "below_min_frequency": 157071
+  },
+  "tags": [
+    {
+      "tag": "rock",
+      "frequency": 79680,
+      "source_examples": "rock; pop rock; soft rock; rock n roll; folk rock"
+    },
+    {
+      "tag": "metal",
+      "frequency": 31660,
+      "source_examples": "metal; metalcore; progressive metal; power metal; nu-metal"
+    },
+    {
+      "tag": "alternative",
+      "frequency": 31601,
+      "source_examples": "alternative; alternative metal; alternative punk; alternative pop; alternative rap"
+    },
+    {
+      "tag": "pop",
+      "frequency": 30121,
+      "source_examples": "pop; power pop; synth pop; powerpop; art pop"
+    },
+    {
+      "tag": "electronic",
+      "frequency": 12754,
+      "source_examples": "electronic; electronic rock; eletronic; indie electronic; electronic pop"
+    },
+    {
+      "tag": "hip-hop",
+      "frequency": 11895,
+      "source_examples": "hip-hop / rap; hip-hop; trip-hop; underground hip-hop; real hip-hop"
+    },
+    {
+      "tag": "punk",
+      "frequency": 11738,
+      "source_examples": "punk; pop-punk; ska punk; post punk; skate punk"
+    },
+    {
+      "tag": "dance",
+      "frequency": 11177,
+      "source_examples": "dance; dance pop; romance; danceable; dance rock"
+    },
+    {
+      "tag": "hard rock",
+      "frequency": 10725,
+      "source_examples": "hard rock; hard; classic hard rock; 90s hard rock; 80s hard rock"
+    },
+    {
+      "tag": "indie",
+      "frequency": 10550,
+      "source_examples": "indie; indietronica; indie folk; indiepop; indie-rock"
+    },
+    {
+      "tag": "alternative rock",
+      "frequency": 9831,
+      "source_examples": "alternative rock; 90s alternative rock"
+    },
+    {
+      "tag": "chill",
+      "frequency": 9786,
+      "source_examples": "chill; chill out; chilled; childhood; aitchchill"
+    },
+    {
+      "tag": "soul",
+      "frequency": 9738,
+      "source_examples": "soul; r&b / soul; soulful; neo-soul; neo soul"
+    },
+    {
+      "tag": "jazz",
+      "frequency": 9351,
+      "source_examples": "jazz; jazzy; smooth jazz; acid jazz; nu jazz"
+    },
+    {
+      "tag": "classic rock",
+      "frequency": 9141,
+      "source_examples": "classic rock; classic; classics; classy; classic track"
+    },
+    {
+      "tag": "emo",
+      "frequency": 8432,
+      "source_examples": "emo; memories; emotional; emocore; emotion"
+    },
+    {
+      "tag": "funk",
+      "frequency": 8222,
+      "source_examples": "fun; funk; funky; funny; metro funky"
+    },
+    {
+      "tag": "singer-songwriter",
+      "frequency": 7974,
+      "source_examples": "singer-songwriter; singer / songwriter; singer songwriter; songwriter; singer-songwriters"
+    },
+    {
+      "tag": "country",
+      "frequency": 7260,
+      "source_examples": "country; alt-country; country rock; modern country; classic country"
+    },
+    {
+      "tag": "soundtrack",
+      "frequency": 6603,
+      "source_examples": "soundtrack; soundtracks; movie soundtrack; zaplovedtracks; lovedtrack"
+    },
+    {
+      "tag": "rap",
+      "frequency": 6491,
+      "source_examples": "rap; gangsta rap; east coast rap; rapcore; trap"
+    },
+    {
+      "tag": "hip hop",
+      "frequency": 6443,
+      "source_examples": "hip hop; hiphop; underground hip hop; true hip hop; east coast hip hop"
+    },
+    {
+      "tag": "blues",
+      "frequency": 6429,
+      "source_examples": "blues; blues rock; rhythm and blues; blues-rock; blue"
+    },
+    {
+      "tag": "heavy metal",
+      "frequency": 6050,
+      "source_examples": "heavy metal; heavy; classic heavy metal; 90s heavy metal; 80s heavy metal"
+    },
+    {
+      "tag": "hardcore",
+      "frequency": 5830,
+      "source_examples": "hardcore; hardcore punk; post hardcore; melodic hardcore; grindcore"
+    },
+    {
+      "tag": "indie rock",
+      "frequency": 5755,
+      "source_examples": "indie rock"
+    },
+    {
+      "tag": "electro",
+      "frequency": 5743,
+      "source_examples": "electro; electropop; electro pop; electro-pop; electroclash"
+    },
+    {
+      "tag": "death metal",
+      "frequency": 5678,
+      "source_examples": "death metal; melodic death metal; death; brutal death metal; technical death metal"
+    },
+    {
+      "tag": "progressive rock",
+      "frequency": 5545,
+      "source_examples": "progressive rock; progressive; aggressive; depressive; progressive deathcore"
+    },
+    {
+      "tag": "experimental",
+      "frequency": 5373,
+      "source_examples": "experimental; experimental rock; sentimental; experimental metal; experimental hip hop"
+    },
+    {
+      "tag": "latin",
+      "frequency": 5087,
+      "source_examples": "latin; latin pop; latin rock; latino; rock latino"
+    },
+    {
+      "tag": "psychedelic",
+      "frequency": 4979,
+      "source_examples": "psychedelic; psychedelic rock; psychedelic pop; neo-psychedelia; psychedelia"
+    },
+    {
+      "tag": "melancholic",
+      "frequency": 4914,
+      "source_examples": "melancholy; melancholic; melancholia; melancholie; nieco melancholicke"
+    },
+    {
+      "tag": "chillout",
+      "frequency": 4848,
+      "source_examples": "chillout; sellout; chillout tracy"
+    },
+    {
+      "tag": "folk",
+      "frequency": 4756,
+      "source_examples": "folk; folk pop; folktronica; freak folk; contemporary folk"
+    },
+    {
+      "tag": "instrumental",
+      "frequency": 4573,
+      "source_examples": "instrumental; instrumental rock; instrumental hip-hop; instrumental hip hop; instrumentals"
+    },
+    {
+      "tag": "relaxing",
+      "frequency": 4468,
+      "source_examples": "relax; relaxing; relaxed; relaxation; relaxing mood"
+    },
+    {
+      "tag": "acoustic",
+      "frequency": 4319,
+      "source_examples": "acoustic; acoustic rock; acoustic guitar; acoustic rhythm guitars; acoustic rhythm piano"
+    },
+    {
+      "tag": "ambient",
+      "frequency": 4210,
+      "source_examples": "ambient; dark ambient; ambient techno; ambient pop; ambience"
+    },
+    {
+      "tag": "new wave",
+      "frequency": 4046,
+      "source_examples": "new wave; new; new york; new york city; new rave"
+    },
+    {
+      "tag": "sad",
+      "frequency": 3657,
+      "source_examples": "sad; sad songs; sadness; sadcore; sad song"
+    },
+    {
+      "tag": "electronica",
+      "frequency": 3606,
+      "source_examples": "electronica; electronica influences; electronica / dance; electronica dance; eletronica"
+    },
+    {
+      "tag": "downtempo",
+      "frequency": 3604,
+      "source_examples": "downtempo; metro downtempo; uptempo; down tempo; midtempo"
+    },
+    {
+      "tag": "happy",
+      "frequency": 3440,
+      "source_examples": "happy; makes me happy; happiness; 123 drippy sappy; happy songs"
+    },
+    {
+      "tag": "dream pop",
+      "frequency": 3279,
+      "source_examples": "dreamy; dream pop; dream; dreams; dreaming"
+    },
+    {
+      "tag": "thrash metal",
+      "frequency": 3100,
+      "source_examples": "thrash metal; thrash; old school thrash metal; mendigao thrash; bay area thrash metal"
+    },
+    {
+      "tag": "punk rock",
+      "frequency": 3044,
+      "source_examples": "punk rock; gwds punk rock; folk punk rock"
+    },
+    {
+      "tag": "grunge",
+      "frequency": 2961,
+      "source_examples": "grunge; post-grunge; post grunge; grunge rock; post- grunge"
+    },
+    {
+      "tag": "rnb",
+      "frequency": 2845,
+      "source_examples": "rnb; contemporary rnb; 90s rnb; modern rnb; rnb number ones"
+    },
+    {
+      "tag": "indie pop",
+      "frequency": 2737,
+      "source_examples": "indie pop"
+    },
+    {
+      "tag": "dark",
+      "frequency": 2583,
+      "source_examples": "dark; darkwave; dark wave; darkness; dark cabaret"
+    },
+    {
+      "tag": "industrial",
+      "frequency": 2580,
+      "source_examples": "industrial; industrial metal; industrial rock; electro-industrial; post-industrial"
+    },
+    {
+      "tag": "classical",
+      "frequency": 2467,
+      "source_examples": "classical; contemporary classical; neoclassical; musical; modern classical"
+    },
+    {
+      "tag": "energetic",
+      "frequency": 2375,
+      "source_examples": "energetic; energy; high energy; energizer; nocna energia"
+    },
+    {
+      "tag": "synthpop",
+      "frequency": 2299,
+      "source_examples": "synthpop; synth; synthesizer; minimal synth; synthesizers"
+    },
+    {
+      "tag": "house",
+      "frequency": 2220,
+      "source_examples": "house; deep house; progressive house; tech house; french house"
+    },
+    {
+      "tag": "gothic",
+      "frequency": 2209,
+      "source_examples": "gothic; gothic metal; gothic rock; goth; gothenburg"
+    },
+    {
+      "tag": "nostalgic",
+      "frequency": 2166,
+      "source_examples": "nostalgia; nostalgic; moja nostalgia"
+    },
+    {
+      "tag": "post-hardcore",
+      "frequency": 2129,
+      "source_examples": "post-hardcore; post-nerdcore; progressive post-hardcore; real post-hardcore"
+    },
+    {
+      "tag": "trip hop",
+      "frequency": 1857,
+      "source_examples": "trip hop; road trip; triphop; roadtrip; trip"
+    },
+    {
+      "tag": "disco",
+      "frequency": 1777,
+      "source_examples": "disco; rakt over disc; discoverockult; nu disco; dischord"
+    },
+    {
+      "tag": "drum and bass",
+      "frequency": 1740,
+      "source_examples": "bass; drum and bass; drum n bass; drum & bass; drum"
+    },
+    {
+      "tag": "britpop",
+      "frequency": 1728,
+      "source_examples": "britpop; brit; britney spears; britney; britannique"
+    },
+    {
+      "tag": "screamo",
+      "frequency": 1577,
+      "source_examples": "screamo; scream; screaming; not screamo; awesome screaming"
+    },
+    {
+      "tag": "pop punk",
+      "frequency": 1535,
+      "source_examples": "pop punk"
+    },
+    {
+      "tag": "trance",
+      "frequency": 1513,
+      "source_examples": "trance; france; trancecore; psytrance; progressive trance"
+    },
+    {
+      "tag": "reggae",
+      "frequency": 1494,
+      "source_examples": "reggae; reggaeton; roots reggae; reggae fusion; reggae rock"
+    },
+    {
+      "tag": "garage rock",
+      "frequency": 1469,
+      "source_examples": "garage rock; garage; garage rock revival; uk garage; future garage"
+    },
+    {
+      "tag": "r&b",
+      "frequency": 1402,
+      "source_examples": "r&b"
+    },
+    {
+      "tag": "post-punk",
+      "frequency": 1391,
+      "source_examples": "post-punk; post-punk revival"
+    },
+    {
+      "tag": "nu metal",
+      "frequency": 1357,
+      "source_examples": "nu metal"
+    },
+    {
+      "tag": "techno",
+      "frequency": 1277,
+      "source_examples": "techno; minimal techno; frauen und technik; acid techno; immortal technique"
+    },
+    {
+      "tag": "angry",
+      "frequency": 1056,
+      "source_examples": "angry; im not angry; angry songs; angry music"
+    },
+    {
+      "tag": "shoegaze",
+      "frequency": 872,
+      "source_examples": "shoegaze; shoegazer; shoegazefan; shoegazing; shoegazing goodness"
+    },
+    {
+      "tag": "club",
+      "frequency": 761,
+      "source_examples": "club; halftoned singles club; baltimore music club; bobbyscdclub; club music"
+    },
+    {
+      "tag": "lo-fi",
+      "frequency": 758,
+      "source_examples": "lo-fi"
+    },
+    {
+      "tag": "dance-pop",
+      "frequency": 466,
+      "source_examples": "dance-pop"
+    },
+    {
+      "tag": "dubstep",
+      "frequency": 436,
+      "source_examples": "dubstep"
+    },
+    {
+      "tag": "funk metal",
+      "frequency": 229,
+      "source_examples": "funk metal"
+    },
+    {
+      "tag": "rap rock",
+      "frequency": 194,
+      "source_examples": "rap rock"
+    },
+    {
+      "tag": "rap metal",
+      "frequency": 182,
+      "source_examples": "rap metal"
+    },
+    {
+      "tag": "afrobeat",
+      "frequency": 53,
+      "source_examples": "afrobeat"
+    }
+  ]
+}

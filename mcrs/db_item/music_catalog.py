@@ -3,6 +3,8 @@ import json
 from datasets import load_dataset, concatenate_datasets
 import torch
 
+from mcrs.controlled_tags import metadata_field
+
 class MusicCatalogDB:
     def __init__(self,
             dataset_name: str,
@@ -19,6 +21,10 @@ class MusicCatalogDB:
         track_id = metadata['track_id']
         entity_str = f"track_id: {track_id}"
         for corpus_type in self.corpus_types:
-            corpus_type_value = ", ".join(metadata[corpus_type]).lower()
+            value = metadata_field(metadata, corpus_type)
+            if isinstance(value, list):
+                corpus_type_value = ", ".join(value).lower()
+            else:
+                corpus_type_value = str(value).lower()
             entity_str += f", {corpus_type}: {corpus_type_value}"
         return entity_str

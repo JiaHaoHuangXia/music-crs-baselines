@@ -9,6 +9,8 @@ import json
 import bm25s
 from datasets import load_dataset, concatenate_datasets
 
+from mcrs.controlled_tags import metadata_field
+
 
 class BM25_MODEL:
     """BM25 retriever over track metadata.
@@ -69,7 +71,7 @@ class BM25_MODEL:
         """
         metadata_str = ""
         for corpus_type in self.corpus_types:
-            entity = metadata[corpus_type]
+            entity = metadata_field(metadata, corpus_type)
             if isinstance(entity, list):
                 entity = ", ".join(entity)
             metadata_str += f"{corpus_type}: {entity}\n"

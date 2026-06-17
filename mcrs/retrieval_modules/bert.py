@@ -14,6 +14,8 @@ from transformers import AutoTokenizer, AutoModel
 import torch
 import torch.nn.functional as F
 
+from mcrs.controlled_tags import metadata_field
+
 
 class BERT_MODEL:
     """BERT-based embedding retriever over track metadata.
@@ -96,7 +98,7 @@ class BERT_MODEL:
         """
         metadata_str = ""
         for corpus_type in self.corpus_types:
-            entity = metadata[corpus_type]
+            entity = metadata_field(metadata, corpus_type)
             if isinstance(entity, list):
                 entity = ", ".join(entity)
             metadata_str += f"{corpus_type}: {entity}\n"

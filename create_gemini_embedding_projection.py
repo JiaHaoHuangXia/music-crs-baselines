@@ -24,6 +24,8 @@ from datasets import concatenate_datasets, load_dataset
 from sentence_transformers import SentenceTransformer
 from transformers import AutoModel, AutoTokenizer
 
+from mcrs.controlled_tags import controlled_tags, metadata_field
+
 
 DATASET_NAME = "talkpl-ai/TalkPlayData-Challenge-Track-Metadata"
 SPLIT_TYPES = ["all_tracks"]
@@ -53,6 +55,7 @@ def pseudo_track_to_text(track: dict[str, Any], corpus_types: list[str]) -> str:
         "artist_name": ", ".join(clean_list_field(track.get("artist_name"))),
         "album_name": ", ".join(clean_list_field(track.get("album_name"))),
         "tag_list": ", ".join(clean_list_field(track.get("tag_list"))),
+        "controlled_tag_list": ", ".join(controlled_tags(track.get("tag_list"))),
         "release_date": str(track.get("release_date", "")).strip(),
     }
     return "\n".join(f"{field}: {values.get(field, '')}" for field in corpus_types)
@@ -240,6 +243,7 @@ def build_catalog_rows(
                 "artist_name": field_to_text(item.get("artist_name", "")),
                 "album_name": field_to_text(item.get("album_name", "")),
                 "tag_list": tag_list,
+                "controlled_tag_list": field_to_text(metadata_field(item, "controlled_tag_list")),
                 "release_date": field_to_text(item.get("release_date", "")),
                 "broad_genre": assign_broad_genre(tag_list),
                 "umap_x": coords[idx, 0],

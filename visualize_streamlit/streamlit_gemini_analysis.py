@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import html
+import math
 
 import pandas as pd
 import plotly.express as px
@@ -383,7 +384,7 @@ def load_gemini_table(path):
     if not path.exists():
         return pd.DataFrame()
 
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, dtype={"session_id": "string"}, low_memory=False)
     text_columns = [
         column
         for column in df.columns
@@ -421,7 +422,7 @@ def load_devset_ground_truth_table(path):
     if not path.exists():
         return pd.DataFrame()
 
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, dtype={"session_id": "string"}, low_memory=False)
     text_columns = [
         column
         for column in df.columns
@@ -465,7 +466,7 @@ def load_embedding_projection(path):
     if not path.exists():
         return pd.DataFrame()
 
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, dtype={"session_id": "string"}, low_memory=False)
     text_columns = [
         column
         for column in df.columns
@@ -532,6 +533,54 @@ def format_metric(value, digits=4):
     if value is None or pd.isna(value):
         return "n/a"
     return f"{value:.{digits}f}"
+
+
+def compute_devset_rank_metrics(conversation_details):
+    rows = []
+    for detail in conversation_details.values():
+        ground_truth_id = detail["ground_truth_track"]["track_id"]
+        rank = next(
+            (
+                idx
+                for idx, track in enumerate(detail.get("predicted_tracks", []), start=1)
+                if track["track_id"] == ground_truth_id
+            ),
+            None,
+        )
+        rows.append(
+            {
+                "session_id": detail["session_id"],
+                "turn_number": detail["turn_number"],
+                "ground_truth_rank": rank,
+                "rank_bucket": (
+                    "#1"
+                    if rank == 1
+                    else "2-5"
+                    if rank is not None and rank <= 5
+                    else "6-10"
+                    if rank is not None and rank <= 10
+                    else "11-20"
+                    if rank is not None and rank <= 20
+                    else "Not in top 20"
+                ),
+                "ndcg_contribution": 0.0 if rank is None else 1.0 / math.log2(rank + 1),
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame(), {}
+
+    ranks_df = pd.DataFrame(rows)
+    total = len(ranks_df)
+    found = int(ranks_df["ground_truth_rank"].notna().sum())
+    metrics = {
+        "evaluated_turns": total,
+        "hit_rate@20": found / total if total else 0.0,
+        "ndcg@20": float(ranks_df["ndcg_contribution"].mean()),
+        "found_turns": found,
+        "missed_turns": total - found,
+    }
+    return ranks_df, metrics
 
 
 def metric_grid(results):
@@ -640,7 +689,7 @@ def render_project_overview():
     )
 
 
-def render_model_results():
+def render_model_results(conversation_details):
     render_header(
         "Model Results",
         "Compare retrieval and response metrics for the model variants tested in this project.",
@@ -689,6 +738,65 @@ def render_model_results():
     )
     devset_df = pd.DataFrame(DEVSET_SUBSET_RESULTS)
     st.dataframe(devset_df, width="stretch", hide_index=True)
+
+    st.markdown("#### Current Devset Run: Exact-Track Retrieval Quality")
+    st.caption(
+        "These metrics are calculated from the exported devset case-study run. "
+        "They answer whether the hidden ground-truth track appears in the model's top-20 recommendations."
+    )
+    ranks_df, rank_metrics = compute_devset_rank_metrics(conversation_details)
+    if ranks_df.empty:
+        st.info("No devset conversation details are available for rank-based metrics.")
+    else:
+        rank_col1, rank_col2, rank_col3, rank_col4 = st.columns(4)
+        rank_col1.metric("Evaluated turns", rank_metrics["evaluated_turns"])
+        rank_col2.metric("Hit rate@20", f"{rank_metrics['hit_rate@20']:.1%}")
+        rank_col3.metric("nDCG@20", format_metric(rank_metrics["ndcg@20"]))
+        rank_col4.metric(
+            "Missed turns",
+            f"{rank_metrics['missed_turns']}/{rank_metrics['evaluated_turns']}",
+        )
+
+        st.markdown(
+            """
+            **How to read this.** Hit rate@20 is the easiest metric: it is the percentage of turns where the
+            correct track appeared anywhere in the top 20. nDCG@20 also rewards position: rank #1 is worth more
+            than rank #20. The distribution below shows whether successful cases are near the top or barely inside
+            the recommendation list.
+            """
+        )
+
+        bucket_order = ["#1", "2-5", "6-10", "11-20", "Not in top 20"]
+        rank_distribution = (
+            ranks_df["rank_bucket"]
+            .value_counts()
+            .reindex(bucket_order, fill_value=0)
+            .rename_axis("ground_truth_rank")
+            .reset_index(name="turns")
+        )
+        rank_distribution["share"] = rank_distribution["turns"] / len(ranks_df)
+        fig = px.bar(
+            rank_distribution,
+            x="ground_truth_rank",
+            y="turns",
+            text="turns",
+            color="ground_truth_rank",
+            title="Where the correct track appeared in the top-20 list",
+        )
+        fig.update_layout(
+            height=380,
+            xaxis_title="Ground-truth track position",
+            yaxis_title="Number of turns",
+            showlegend=False,
+        )
+        fig.update_traces(textposition="outside")
+        st.plotly_chart(fig, width="stretch")
+
+        st.dataframe(
+            rank_distribution.assign(share=rank_distribution["share"].map(lambda value: f"{value:.1%}")),
+            width="stretch",
+            hide_index=True,
+        )
 
     st.markdown("#### Interpretation")
     st.markdown(
@@ -1449,7 +1557,15 @@ def render_oracle_check(ground_truth_df, gemini_df, retrieved_df, selected_sessi
         )
     else:
         reference_summary["best_ground_truth_rank"] = None
-    reference_summary["best_ground_truth_rank"] = reference_summary["best_ground_truth_rank"].fillna("not found")
+    reference_summary["best_ground_truth_rank"] = (
+        reference_summary["best_ground_truth_rank"]
+        .map(lambda value: "not found" if pd.isna(value) else str(int(value)))
+        .astype("string")
+    )
+    reference_summary["target_found"] = reference_summary["target_found"].map(
+        lambda value: "yes" if bool(value) else "no"
+    )
+    reference_summary["gemini_reference"] = reference_summary["gemini_reference"].astype("string")
     st.dataframe(reference_summary, width="stretch", hide_index=True)
 
 
@@ -2006,7 +2122,7 @@ def main():
     elif page == "Devset Embedding Map":
         render_embedding_map(embedding_projection_df, devset_conversations)
     else:
-        render_model_results()
+        render_model_results(devset_conversations)
 
 
 if __name__ == "__main__":

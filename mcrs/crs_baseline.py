@@ -6,6 +6,7 @@ from mcrs.db_item import MusicCatalogDB
 from mcrs.db_user import UserProfileDB
 from mcrs.lm_modules import load_lm_module
 from mcrs.retrieval_modules import load_retrieval_module
+from mcrs.controlled_tags import controlled_tags
 
 from mcrs.query_expansion.gemini_expander import GeminiExpander
 
@@ -139,13 +140,15 @@ class CRS_BASELINE:
                 return ", ".join(str(item).strip() for item in value if str(item).strip())
             return str(value).strip() if value is not None else ""
 
-        return (
-            f"track_name: {clean_join(track.get('track_name'))}\n"
-            f"artist_name: {clean_join(track.get('artist_name'))}\n"
-            f"album_name: {clean_join(track.get('album_name'))}\n"
-            f"tag_list: {clean_join(track.get('tag_list'))}\n"
-            f"release_date: {clean_join(track.get('release_date'))}"
-        )
+        values = {
+            "track_name": clean_join(track.get("track_name")),
+            "artist_name": clean_join(track.get("artist_name")),
+            "album_name": clean_join(track.get("album_name")),
+            "tag_list": clean_join(track.get("tag_list")),
+            "controlled_tag_list": clean_join(controlled_tags(track.get("tag_list"))),
+            "release_date": clean_join(track.get("release_date")),
+        }
+        return "\n".join(f"{field}: {values.get(field, '')}" for field in self.corpus_types)
 
     def _reciprocal_rank_fusion(
         self,

@@ -9,6 +9,8 @@ import torch.nn.functional as F
 from datasets import concatenate_datasets, load_dataset
 from sentence_transformers import SentenceTransformer
 
+from mcrs.controlled_tags import metadata_field
+
 
 class SENTENCE_TRANSFORMER_MODEL:
     """Embedding retriever using a sentence-transformers model.
@@ -69,7 +71,7 @@ class SENTENCE_TRANSFORMER_MODEL:
     def _stringify_metadata(self, metadata: Dict[str, object]) -> str:
         parts = []
         for corpus_type in self.corpus_types:
-            entity = metadata[corpus_type]
+            entity = metadata_field(metadata, corpus_type)
             if isinstance(entity, list):
                 entity = ", ".join(entity)
             parts.append(f"{corpus_type}: {entity}")
