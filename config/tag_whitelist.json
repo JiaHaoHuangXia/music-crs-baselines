@@ -3,142 +3,62 @@
   "splits": [
     "all_tracks"
   ],
+  "selection_method": "popular",
   "min_frequency": 25,
   "max_tags": 400,
   "max_words": 4,
   "min_vocab_similarity": 0.58,
-  "method": "frequency + tag-shape rules + character-ngram similarity to controlled music vocabulary",
+  "method": "frequency + noise/tag-shape rules",
   "rejected_counts": {
     "noise": 304,
-    "low_vocab_similarity": 4220,
     "bad_shape": 275,
     "below_min_frequency": 157071
   },
   "tags": [
     {
       "tag": "rock",
-      "frequency": 79680,
-      "source_examples": "rock; pop rock; soft rock; rock n roll; folk rock"
-    },
-    {
-      "tag": "metal",
-      "frequency": 31660,
-      "source_examples": "metal; metalcore; progressive metal; power metal; nu-metal"
+      "frequency": 36164,
+      "source_examples": "rock"
     },
     {
       "tag": "alternative",
-      "frequency": 31601,
-      "source_examples": "alternative; alternative metal; alternative punk; alternative pop; alternative rap"
+      "frequency": 23570,
+      "source_examples": "alternative"
     },
     {
       "tag": "pop",
-      "frequency": 30121,
-      "source_examples": "pop; power pop; synth pop; powerpop; art pop"
+      "frequency": 21664,
+      "source_examples": "pop"
+    },
+    {
+      "tag": "metal",
+      "frequency": 11553,
+      "source_examples": "metal"
     },
     {
       "tag": "electronic",
-      "frequency": 12754,
-      "source_examples": "electronic; electronic rock; eletronic; indie electronic; electronic pop"
-    },
-    {
-      "tag": "hip-hop",
-      "frequency": 11895,
-      "source_examples": "hip-hop / rap; hip-hop; trip-hop; underground hip-hop; real hip-hop"
-    },
-    {
-      "tag": "punk",
-      "frequency": 11738,
-      "source_examples": "punk; pop-punk; ska punk; post punk; skate punk"
-    },
-    {
-      "tag": "dance",
-      "frequency": 11177,
-      "source_examples": "dance; dance pop; romance; danceable; dance rock"
-    },
-    {
-      "tag": "hard rock",
-      "frequency": 10725,
-      "source_examples": "hard rock; hard; classic hard rock; 90s hard rock; 80s hard rock"
-    },
-    {
-      "tag": "indie",
-      "frequency": 10550,
-      "source_examples": "indie; indietronica; indie folk; indiepop; indie-rock"
+      "frequency": 11276,
+      "source_examples": "electronic"
     },
     {
       "tag": "alternative rock",
-      "frequency": 9831,
-      "source_examples": "alternative rock; 90s alternative rock"
+      "frequency": 9805,
+      "source_examples": "alternative rock"
     },
     {
-      "tag": "chill",
-      "frequency": 9786,
-      "source_examples": "chill; chill out; chilled; childhood; aitchchill"
+      "tag": "hard rock",
+      "frequency": 8449,
+      "source_examples": "hard rock"
     },
     {
-      "tag": "soul",
-      "frequency": 9738,
-      "source_examples": "soul; r&b / soul; soulful; neo-soul; neo soul"
+      "tag": "indie",
+      "frequency": 8037,
+      "source_examples": "indie"
     },
     {
-      "tag": "jazz",
-      "frequency": 9351,
-      "source_examples": "jazz; jazzy; smooth jazz; acid jazz; nu jazz"
-    },
-    {
-      "tag": "classic rock",
-      "frequency": 9141,
-      "source_examples": "classic rock; classic; classics; classy; classic track"
-    },
-    {
-      "tag": "emo",
-      "frequency": 8432,
-      "source_examples": "emo; memories; emotional; emocore; emotion"
-    },
-    {
-      "tag": "funk",
-      "frequency": 8222,
-      "source_examples": "fun; funk; funky; funny; metro funky"
-    },
-    {
-      "tag": "singer-songwriter",
-      "frequency": 7974,
-      "source_examples": "singer-songwriter; singer / songwriter; singer songwriter; songwriter; singer-songwriters"
-    },
-    {
-      "tag": "country",
-      "frequency": 7260,
-      "source_examples": "country; alt-country; country rock; modern country; classic country"
-    },
-    {
-      "tag": "soundtrack",
-      "frequency": 6603,
-      "source_examples": "soundtrack; soundtracks; movie soundtrack; zaplovedtracks; lovedtrack"
-    },
-    {
-      "tag": "rap",
-      "frequency": 6491,
-      "source_examples": "rap; gangsta rap; east coast rap; rapcore; trap"
-    },
-    {
-      "tag": "hip hop",
-      "frequency": 6443,
-      "source_examples": "hip hop; hiphop; underground hip hop; true hip hop; east coast hip hop"
-    },
-    {
-      "tag": "blues",
-      "frequency": 6429,
-      "source_examples": "blues; blues rock; rhythm and blues; blues-rock; blue"
-    },
-    {
-      "tag": "heavy metal",
-      "frequency": 6050,
-      "source_examples": "heavy metal; heavy; classic heavy metal; 90s heavy metal; 80s heavy metal"
-    },
-    {
-      "tag": "hardcore",
-      "frequency": 5830,
-      "source_examples": "hardcore; hardcore punk; post hardcore; melodic hardcore; grindcore"
+      "tag": "dance",
+      "frequency": 7183,
+      "source_examples": "dance"
     },
     {
       "tag": "indie rock",
@@ -146,119 +66,194 @@
       "source_examples": "indie rock"
     },
     {
-      "tag": "electro",
-      "frequency": 5743,
-      "source_examples": "electro; electropop; electro pop; electro-pop; electroclash"
+      "tag": "punk",
+      "frequency": 5501,
+      "source_examples": "punk"
     },
     {
-      "tag": "death metal",
-      "frequency": 5678,
-      "source_examples": "death metal; melodic death metal; death; brutal death metal; technical death metal"
+      "tag": "classic rock",
+      "frequency": 5208,
+      "source_examples": "classic rock"
     },
     {
-      "tag": "progressive rock",
-      "frequency": 5545,
-      "source_examples": "progressive rock; progressive; aggressive; depressive; progressive deathcore"
+      "tag": "chill",
+      "frequency": 5175,
+      "source_examples": "chill"
     },
     {
-      "tag": "experimental",
-      "frequency": 5373,
-      "source_examples": "experimental; experimental rock; sentimental; experimental metal; experimental hip hop"
+      "tag": "hip-hop / rap",
+      "frequency": 4853,
+      "source_examples": "hip-hop / rap"
     },
     {
-      "tag": "latin",
-      "frequency": 5087,
-      "source_examples": "latin; latin pop; latin rock; latino; rock latino"
-    },
-    {
-      "tag": "psychedelic",
-      "frequency": 4979,
-      "source_examples": "psychedelic; psychedelic rock; psychedelic pop; neo-psychedelia; psychedelia"
-    },
-    {
-      "tag": "melancholic",
-      "frequency": 4914,
-      "source_examples": "melancholy; melancholic; melancholia; melancholie; nieco melancholicke"
+      "tag": "mellow",
+      "frequency": 4763,
+      "source_examples": "mellow"
     },
     {
       "tag": "chillout",
-      "frequency": 4848,
-      "source_examples": "chillout; sellout; chillout tracy"
+      "frequency": 4745,
+      "source_examples": "chillout"
+    },
+    {
+      "tag": "singer-songwriter",
+      "frequency": 4511,
+      "source_examples": "singer-songwriter"
+    },
+    {
+      "tag": "male vocalist",
+      "frequency": 4208,
+      "source_examples": "male vocalist"
+    },
+    {
+      "tag": "hip-hop",
+      "frequency": 3820,
+      "source_examples": "hip-hop"
+    },
+    {
+      "tag": "experimental",
+      "frequency": 3812,
+      "source_examples": "experimental"
+    },
+    {
+      "tag": "pop rock",
+      "frequency": 3781,
+      "source_examples": "pop rock"
+    },
+    {
+      "tag": "jazz",
+      "frequency": 3623,
+      "source_examples": "jazz"
+    },
+    {
+      "tag": "soul",
+      "frequency": 3495,
+      "source_examples": "soul"
+    },
+    {
+      "tag": "heavy metal",
+      "frequency": 3437,
+      "source_examples": "heavy metal"
+    },
+    {
+      "tag": "epic",
+      "frequency": 3394,
+      "source_examples": "epic"
     },
     {
       "tag": "folk",
-      "frequency": 4756,
-      "source_examples": "folk; folk pop; folktronica; freak folk; contemporary folk"
+      "frequency": 3388,
+      "source_examples": "folk"
+    },
+    {
+      "tag": "love at first listen",
+      "frequency": 3382,
+      "source_examples": "love at first listen"
     },
     {
       "tag": "instrumental",
-      "frequency": 4573,
-      "source_examples": "instrumental; instrumental rock; instrumental hip-hop; instrumental hip hop; instrumentals"
+      "frequency": 3300,
+      "source_examples": "instrumental"
     },
     {
-      "tag": "relaxing",
-      "frequency": 4468,
-      "source_examples": "relax; relaxing; relaxed; relaxation; relaxing mood"
+      "tag": "country",
+      "frequency": 3292,
+      "source_examples": "country"
+    },
+    {
+      "tag": "catchy",
+      "frequency": 3286,
+      "source_examples": "catchy"
+    },
+    {
+      "tag": "guitar",
+      "frequency": 3272,
+      "source_examples": "guitar"
     },
     {
       "tag": "acoustic",
-      "frequency": 4319,
-      "source_examples": "acoustic; acoustic rock; acoustic guitar; acoustic rhythm guitars; acoustic rhythm piano"
+      "frequency": 3190,
+      "source_examples": "acoustic"
     },
     {
       "tag": "ambient",
-      "frequency": 4210,
-      "source_examples": "ambient; dark ambient; ambient techno; ambient pop; ambience"
+      "frequency": 3131,
+      "source_examples": "ambient"
     },
     {
-      "tag": "new wave",
-      "frequency": 4046,
-      "source_examples": "new wave; new; new york; new york city; new rave"
+      "tag": "sexy",
+      "frequency": 3099,
+      "source_examples": "sexy"
     },
     {
-      "tag": "sad",
-      "frequency": 3657,
-      "source_examples": "sad; sad songs; sadness; sadcore; sad song"
+      "tag": "rap",
+      "frequency": 3099,
+      "source_examples": "rap"
+    },
+    {
+      "tag": "soundtrack",
+      "frequency": 3078,
+      "source_examples": "soundtrack"
+    },
+    {
+      "tag": "emo",
+      "frequency": 3058,
+      "source_examples": "emo"
     },
     {
       "tag": "electronica",
-      "frequency": 3606,
-      "source_examples": "electronica; electronica influences; electronica / dance; electronica dance; eletronica"
+      "frequency": 3047,
+      "source_examples": "electronica"
     },
     {
-      "tag": "downtempo",
-      "frequency": 3604,
-      "source_examples": "downtempo; metro downtempo; uptempo; down tempo; midtempo"
+      "tag": "hardcore",
+      "frequency": 3007,
+      "source_examples": "hardcore"
     },
     {
-      "tag": "happy",
-      "frequency": 3440,
-      "source_examples": "happy; makes me happy; happiness; 123 drippy sappy; happy songs"
+      "tag": "classic",
+      "frequency": 3003,
+      "source_examples": "classic"
     },
     {
-      "tag": "dream pop",
-      "frequency": 3279,
-      "source_examples": "dreamy; dream pop; dream; dreams; dreaming"
+      "tag": "hip hop",
+      "frequency": 2999,
+      "source_examples": "hip hop"
     },
     {
-      "tag": "thrash metal",
-      "frequency": 3100,
-      "source_examples": "thrash metal; thrash; old school thrash metal; mendigao thrash; bay area thrash metal"
+      "tag": "sad",
+      "frequency": 2983,
+      "source_examples": "sad"
     },
     {
       "tag": "punk rock",
-      "frequency": 3044,
-      "source_examples": "punk rock; gwds punk rock; folk punk rock"
+      "frequency": 2976,
+      "source_examples": "punk rock"
     },
     {
-      "tag": "grunge",
-      "frequency": 2961,
-      "source_examples": "grunge; post-grunge; post grunge; grunge rock; post- grunge"
+      "tag": "easy listening",
+      "frequency": 2932,
+      "source_examples": "easy listening"
     },
     {
-      "tag": "rnb",
-      "frequency": 2845,
-      "source_examples": "rnb; contemporary rnb; 90s rnb; modern rnb; rnb number ones"
+      "tag": "r&b / soul",
+      "frequency": 2855,
+      "source_examples": "r&b / soul"
+    },
+    {
+      "tag": "female vocalist",
+      "frequency": 2824,
+      "source_examples": "female vocalist"
+    },
+    {
+      "tag": "2000s",
+      "frequency": 2797,
+      "source_examples": "2000s"
+    },
+    {
+      "tag": "fun",
+      "frequency": 2781,
+      "source_examples": "fun"
     },
     {
       "tag": "indie pop",
@@ -266,74 +261,244 @@
       "source_examples": "indie pop"
     },
     {
-      "tag": "dark",
-      "frequency": 2583,
-      "source_examples": "dark; darkwave; dark wave; darkness; dark cabaret"
+      "tag": "progressive rock",
+      "frequency": 2710,
+      "source_examples": "progressive rock"
     },
     {
-      "tag": "industrial",
-      "frequency": 2580,
-      "source_examples": "industrial; industrial metal; industrial rock; electro-industrial; post-industrial"
+      "tag": "party",
+      "frequency": 2639,
+      "source_examples": "party"
     },
     {
-      "tag": "classical",
-      "frequency": 2467,
-      "source_examples": "classical; contemporary classical; neoclassical; musical; modern classical"
+      "tag": "soundtracks",
+      "frequency": 2578,
+      "source_examples": "soundtracks"
     },
     {
-      "tag": "energetic",
-      "frequency": 2375,
-      "source_examples": "energetic; energy; high energy; energizer; nocna energia"
+      "tag": "happy",
+      "frequency": 2517,
+      "source_examples": "happy"
     },
     {
-      "tag": "synthpop",
-      "frequency": 2299,
-      "source_examples": "synthpop; synth; synthesizer; minimal synth; synthesizers"
+      "tag": "melancholy",
+      "frequency": 2509,
+      "source_examples": "melancholy"
     },
     {
-      "tag": "house",
-      "frequency": 2220,
-      "source_examples": "house; deep house; progressive house; tech house; french house"
+      "tag": "latin",
+      "frequency": 2498,
+      "source_examples": "latin"
     },
     {
-      "tag": "gothic",
-      "frequency": 2209,
-      "source_examples": "gothic; gothic metal; gothic rock; goth; gothenburg"
+      "tag": "rnb",
+      "frequency": 2447,
+      "source_examples": "rnb"
     },
     {
-      "tag": "nostalgic",
-      "frequency": 2166,
-      "source_examples": "nostalgia; nostalgic; moja nostalgia"
+      "tag": "blues",
+      "frequency": 2436,
+      "source_examples": "blues"
+    },
+    {
+      "tag": "funk",
+      "frequency": 2357,
+      "source_examples": "funk"
+    },
+    {
+      "tag": "soft rock",
+      "frequency": 2354,
+      "source_examples": "soft rock"
+    },
+    {
+      "tag": "psychedelic",
+      "frequency": 2336,
+      "source_examples": "psychedelic"
+    },
+    {
+      "tag": "fucking awesome",
+      "frequency": 2295,
+      "source_examples": "fucking awesome"
+    },
+    {
+      "tag": "oldies",
+      "frequency": 2271,
+      "source_examples": "oldies"
+    },
+    {
+      "tag": "upbeat",
+      "frequency": 2169,
+      "source_examples": "upbeat"
+    },
+    {
+      "tag": "melancholic",
+      "frequency": 2164,
+      "source_examples": "melancholic"
+    },
+    {
+      "tag": "ballad",
+      "frequency": 2134,
+      "source_examples": "ballad"
+    },
+    {
+      "tag": "piano",
+      "frequency": 2126,
+      "source_examples": "piano"
+    },
+    {
+      "tag": "metalcore",
+      "frequency": 2112,
+      "source_examples": "metalcore"
+    },
+    {
+      "tag": "summer",
+      "frequency": 2076,
+      "source_examples": "summer"
+    },
+    {
+      "tag": "fip",
+      "frequency": 2052,
+      "source_examples": "fip"
+    },
+    {
+      "tag": "relax",
+      "frequency": 2043,
+      "source_examples": "relax"
+    },
+    {
+      "tag": "love it",
+      "frequency": 2042,
+      "source_examples": "love it"
+    },
+    {
+      "tag": "relaxing",
+      "frequency": 2027,
+      "source_examples": "relaxing"
+    },
+    {
+      "tag": "downtempo",
+      "frequency": 2026,
+      "source_examples": "downtempo"
+    },
+    {
+      "tag": "alternative metal",
+      "frequency": 1998,
+      "source_examples": "alternative metal"
+    },
+    {
+      "tag": "atmospheric",
+      "frequency": 1925,
+      "source_examples": "atmospheric"
+    },
+    {
+      "tag": "singer / songwriter",
+      "frequency": 1901,
+      "source_examples": "singer / songwriter"
     },
     {
       "tag": "post-hardcore",
-      "frequency": 2129,
-      "source_examples": "post-hardcore; post-nerdcore; progressive post-hardcore; real post-hardcore"
+      "frequency": 1838,
+      "source_examples": "post-hardcore"
     },
     {
-      "tag": "trip hop",
-      "frequency": 1857,
-      "source_examples": "trip hop; road trip; triphop; roadtrip; trip"
+      "tag": "female",
+      "frequency": 1811,
+      "source_examples": "female"
     },
     {
-      "tag": "disco",
-      "frequency": 1777,
-      "source_examples": "disco; rakt over disc; discoverockult; nu disco; dischord"
+      "tag": "2010s",
+      "frequency": 1803,
+      "source_examples": "2010s"
     },
     {
-      "tag": "drum and bass",
-      "frequency": 1740,
-      "source_examples": "bass; drum and bass; drum n bass; drum & bass; drum"
+      "tag": "romantic",
+      "frequency": 1768,
+      "source_examples": "romantic"
     },
     {
-      "tag": "britpop",
-      "frequency": 1728,
-      "source_examples": "britpop; brit; britney spears; britney; britannique"
+      "tag": "memories",
+      "frequency": 1730,
+      "source_examples": "memories"
     },
     {
-      "tag": "screamo",
-      "frequency": 1577,
-      "source_examples": "screamo; scream; screaming; not screamo; awesome screaming"
+      "tag": "electro",
+      "frequency": 1712,
+      "source_examples": "electro"
+    },
+    {
+      "tag": "smooth",
+      "frequency": 1687,
+      "source_examples": "smooth"
+    },
+    {
+      "tag": "rock n roll",
+      "frequency": 1682,
+      "source_examples": "rock n roll"
+    },
+    {
+      "tag": "dark",
+      "frequency": 1680,
+      "source_examples": "dark"
+    },
+    {
+      "tag": "progressive metal",
+      "frequency": 1661,
+      "source_examples": "progressive metal"
+    },
+    {
+      "tag": "dreamy",
+      "frequency": 1629,
+      "source_examples": "dreamy"
+    },
+    {
+      "tag": "energetic",
+      "frequency": 1624,
+      "source_examples": "energetic"
+    },
+    {
+      "tag": "new wave",
+      "frequency": 1615,
+      "source_examples": "new wave"
+    },
+    {
+      "tag": "death metal",
+      "frequency": 1614,
+      "source_examples": "death metal"
+    },
+    {
+      "tag": "love songs",
+      "frequency": 1614,
+      "source_examples": "love songs"
+    },
+    {
+      "tag": "funky",
+      "frequency": 1592,
+      "source_examples": "funky"
+    },
+    {
+      "tag": "sweet",
+      "frequency": 1592,
+      "source_examples": "sweet"
+    },
+    {
+      "tag": "female vocals",
+      "frequency": 1590,
+      "source_examples": "female vocals"
+    },
+    {
+      "tag": "progressive",
+      "frequency": 1549,
+      "source_examples": "progressive"
+    },
+    {
+      "tag": "great lyrics",
+      "frequency": 1545,
+      "source_examples": "great lyrics"
+    },
+    {
+      "tag": "christian",
+      "frequency": 1545,
+      "source_examples": "christian"
     },
     {
       "tag": "pop punk",
@@ -341,19 +506,49 @@
       "source_examples": "pop punk"
     },
     {
-      "tag": "trance",
+      "tag": "classical",
+      "frequency": 1530,
+      "source_examples": "classical"
+    },
+    {
+      "tag": "lounge",
       "frequency": 1513,
-      "source_examples": "trance; france; trancecore; psytrance; progressive trance"
+      "source_examples": "lounge"
     },
     {
-      "tag": "reggae",
-      "frequency": 1494,
-      "source_examples": "reggae; reggaeton; roots reggae; reggae fusion; reggae rock"
+      "tag": "best",
+      "frequency": 1509,
+      "source_examples": "best"
     },
     {
-      "tag": "garage rock",
-      "frequency": 1469,
-      "source_examples": "garage rock; garage; garage rock revival; uk garage; future garage"
+      "tag": "grunge",
+      "frequency": 1501,
+      "source_examples": "grunge"
+    },
+    {
+      "tag": "great song",
+      "frequency": 1478,
+      "source_examples": "great song"
+    },
+    {
+      "tag": "live",
+      "frequency": 1455,
+      "source_examples": "live"
+    },
+    {
+      "tag": "slow",
+      "frequency": 1454,
+      "source_examples": "slow"
+    },
+    {
+      "tag": "synthpop",
+      "frequency": 1436,
+      "source_examples": "synthpop"
+    },
+    {
+      "tag": "like",
+      "frequency": 1414,
+      "source_examples": "like"
     },
     {
       "tag": "r&b",
@@ -361,9 +556,39 @@
       "source_examples": "r&b"
     },
     {
-      "tag": "post-punk",
+      "tag": "driving",
+      "frequency": 1397,
+      "source_examples": "driving"
+    },
+    {
+      "tag": "blues rock",
+      "frequency": 1394,
+      "source_examples": "blues rock"
+    },
+    {
+      "tag": "folk rock",
       "frequency": 1391,
-      "source_examples": "post-punk; post-punk revival"
+      "source_examples": "folk rock"
+    },
+    {
+      "tag": "latin pop",
+      "frequency": 1389,
+      "source_examples": "latin pop"
+    },
+    {
+      "tag": "lovely",
+      "frequency": 1370,
+      "source_examples": "lovely"
+    },
+    {
+      "tag": "thrash metal",
+      "frequency": 1365,
+      "source_examples": "thrash metal"
+    },
+    {
+      "tag": "perfect",
+      "frequency": 1365,
+      "source_examples": "perfect"
     },
     {
       "tag": "nu metal",
@@ -371,24 +596,429 @@
       "source_examples": "nu metal"
     },
     {
+      "tag": "cover",
+      "frequency": 1350,
+      "source_examples": "cover"
+    },
+    {
+      "tag": "trip-hop",
+      "frequency": 1342,
+      "source_examples": "trip-hop"
+    },
+    {
+      "tag": "melodic",
+      "frequency": 1339,
+      "source_examples": "melodic"
+    },
+    {
+      "tag": "soft",
+      "frequency": 1335,
+      "source_examples": "soft"
+    },
+    {
+      "tag": "screamo",
+      "frequency": 1310,
+      "source_examples": "screamo"
+    },
+    {
+      "tag": "english",
+      "frequency": 1310,
+      "source_examples": "english"
+    },
+    {
+      "tag": "vocal",
+      "frequency": 1306,
+      "source_examples": "vocal"
+    },
+    {
+      "tag": "english lyrics",
+      "frequency": 1302,
+      "source_examples": "english lyrics"
+    },
+    {
+      "tag": "house",
+      "frequency": 1292,
+      "source_examples": "house"
+    },
+    {
+      "tag": "psychedelic rock",
+      "frequency": 1280,
+      "source_examples": "psychedelic rock"
+    },
+    {
+      "tag": "post-punk",
+      "frequency": 1278,
+      "source_examples": "post-punk"
+    },
+    {
+      "tag": "nostalgia",
+      "frequency": 1268,
+      "source_examples": "nostalgia"
+    },
+    {
+      "tag": "emotional",
+      "frequency": 1264,
+      "source_examples": "emotional"
+    },
+    {
+      "tag": "britpop",
+      "frequency": 1217,
+      "source_examples": "britpop"
+    },
+    {
+      "tag": "masterpiece",
+      "frequency": 1211,
+      "source_examples": "masterpiece"
+    },
+    {
+      "tag": "electropop",
+      "frequency": 1197,
+      "source_examples": "electropop"
+    },
+    {
+      "tag": "good stuff",
+      "frequency": 1196,
+      "source_examples": "good stuff"
+    },
+    {
+      "tag": "reggae",
+      "frequency": 1187,
+      "source_examples": "reggae"
+    },
+    {
+      "tag": "k1r7m",
+      "frequency": 1187,
+      "source_examples": "k1r7m"
+    },
+    {
+      "tag": "calm",
+      "frequency": 1176,
+      "source_examples": "calm"
+    },
+    {
+      "tag": "groovy",
+      "frequency": 1160,
+      "source_examples": "groovy"
+    },
+    {
+      "tag": "industrial",
+      "frequency": 1155,
+      "source_examples": "industrial"
+    },
+    {
+      "tag": "heavy",
+      "frequency": 1153,
+      "source_examples": "heavy"
+    },
+    {
       "tag": "techno",
-      "frequency": 1277,
-      "source_examples": "techno; minimal techno; frauen und technik; acid techno; immortal technique"
+      "frequency": 1113,
+      "source_examples": "techno"
+    },
+    {
+      "tag": "feel good",
+      "frequency": 1111,
+      "source_examples": "feel good"
+    },
+    {
+      "tag": "old school",
+      "frequency": 1101,
+      "source_examples": "old school"
+    },
+    {
+      "tag": "california",
+      "frequency": 1090,
+      "source_examples": "california"
+    },
+    {
+      "tag": "alt rock",
+      "frequency": 1088,
+      "source_examples": "alt rock"
+    },
+    {
+      "tag": "somafm",
+      "frequency": 1063,
+      "source_examples": "somafm"
+    },
+    {
+      "tag": "1990s",
+      "frequency": 1061,
+      "source_examples": "1990s"
+    },
+    {
+      "tag": "male vocals",
+      "frequency": 1053,
+      "source_examples": "male vocals"
+    },
+    {
+      "tag": "alternative punk",
+      "frequency": 1028,
+      "source_examples": "alternative punk"
+    },
+    {
+      "tag": "sex",
+      "frequency": 996,
+      "source_examples": "sex"
+    },
+    {
+      "tag": "brilliant",
+      "frequency": 991,
+      "source_examples": "brilliant"
+    },
+    {
+      "tag": "art rock",
+      "frequency": 987,
+      "source_examples": "art rock"
+    },
+    {
+      "tag": "uplifting",
+      "frequency": 983,
+      "source_examples": "uplifting"
+    },
+    {
+      "tag": "rock and roll",
+      "frequency": 978,
+      "source_examples": "rock and roll"
+    },
+    {
+      "tag": "cute",
+      "frequency": 975,
+      "source_examples": "cute"
+    },
+    {
+      "tag": "urban",
+      "frequency": 959,
+      "source_examples": "urban"
+    },
+    {
+      "tag": "melodic death metal",
+      "frequency": 958,
+      "source_examples": "melodic death metal"
+    },
+    {
+      "tag": "love song",
+      "frequency": 945,
+      "source_examples": "love song"
+    },
+    {
+      "tag": "disco",
+      "frequency": 940,
+      "source_examples": "disco"
+    },
+    {
+      "tag": "canadian",
+      "frequency": 940,
+      "source_examples": "canadian"
     },
     {
       "tag": "angry",
-      "frequency": 1056,
-      "source_examples": "angry; im not angry; angry songs; angry music"
+      "frequency": 937,
+      "source_examples": "angry"
     },
     {
-      "tag": "shoegaze",
+      "tag": "post-rock",
+      "frequency": 932,
+      "source_examples": "post-rock"
+    },
+    {
+      "tag": "album rock",
+      "frequency": 927,
+      "source_examples": "album rock"
+    },
+    {
+      "tag": "post-grunge",
+      "frequency": 903,
+      "source_examples": "post-grunge"
+    },
+    {
+      "tag": "rhythm and blues",
+      "frequency": 902,
+      "source_examples": "rhythm and blues"
+    },
+    {
+      "tag": "vugube62",
+      "frequency": 890,
+      "source_examples": "vugube62"
+    },
+    {
+      "tag": "haunting",
+      "frequency": 879,
+      "source_examples": "haunting"
+    },
+    {
+      "tag": "genius",
+      "frequency": 877,
+      "source_examples": "genius"
+    },
+    {
+      "tag": "garage rock",
       "frequency": 872,
-      "source_examples": "shoegaze; shoegazer; shoegazefan; shoegazing; shoegazing goodness"
+      "source_examples": "garage rock"
     },
     {
-      "tag": "club",
-      "frequency": 761,
-      "source_examples": "club; halftoned singles club; baltimore music club; bobbyscdclub; club music"
+      "tag": "nostalgic",
+      "frequency": 869,
+      "source_examples": "nostalgic"
+    },
+    {
+      "tag": "ethereal",
+      "frequency": 867,
+      "source_examples": "ethereal"
+    },
+    {
+      "tag": "emocore",
+      "frequency": 857,
+      "source_examples": "emocore"
+    },
+    {
+      "tag": "world",
+      "frequency": 854,
+      "source_examples": "world"
+    },
+    {
+      "tag": "americana",
+      "frequency": 843,
+      "source_examples": "americana"
+    },
+    {
+      "tag": "groove",
+      "frequency": 841,
+      "source_examples": "groove"
+    },
+    {
+      "tag": "bass",
+      "frequency": 840,
+      "source_examples": "bass"
+    },
+    {
+      "tag": "new age",
+      "frequency": 840,
+      "source_examples": "new age"
+    },
+    {
+      "tag": "hiphop",
+      "frequency": 828,
+      "source_examples": "hiphop"
+    },
+    {
+      "tag": "powerful",
+      "frequency": 826,
+      "source_examples": "powerful"
+    },
+    {
+      "tag": "2012",
+      "frequency": 825,
+      "source_examples": "2012"
+    },
+    {
+      "tag": "faves",
+      "frequency": 825,
+      "source_examples": "faves"
+    },
+    {
+      "tag": "political",
+      "frequency": 820,
+      "source_examples": "political"
+    },
+    {
+      "tag": "power pop",
+      "frequency": 815,
+      "source_examples": "power pop"
+    },
+    {
+      "tag": "guilty pleasure",
+      "frequency": 814,
+      "source_examples": "guilty pleasure"
+    },
+    {
+      "tag": "others",
+      "frequency": 813,
+      "source_examples": "others"
+    },
+    {
+      "tag": "chill out",
+      "frequency": 811,
+      "source_examples": "chill out"
+    },
+    {
+      "tag": "glam rock",
+      "frequency": 808,
+      "source_examples": "glam rock"
+    },
+    {
+      "tag": "dream pop",
+      "frequency": 798,
+      "source_examples": "dream pop"
+    },
+    {
+      "tag": "pop-rock",
+      "frequency": 796,
+      "source_examples": "pop-rock"
+    },
+    {
+      "tag": "2013",
+      "frequency": 792,
+      "source_examples": "2013"
+    },
+    {
+      "tag": "eclectonia",
+      "frequency": 792,
+      "source_examples": "eclectonia"
+    },
+    {
+      "tag": "top 40",
+      "frequency": 791,
+      "source_examples": "top 40"
+    },
+    {
+      "tag": "trip hop",
+      "frequency": 779,
+      "source_examples": "trip hop"
+    },
+    {
+      "tag": "jazzy",
+      "frequency": 779,
+      "source_examples": "jazzy"
+    },
+    {
+      "tag": "the best",
+      "frequency": 779,
+      "source_examples": "the best"
+    },
+    {
+      "tag": "other",
+      "frequency": 773,
+      "source_examples": "other"
+    },
+    {
+      "tag": "hardcore punk",
+      "frequency": 773,
+      "source_examples": "hardcore punk"
+    },
+    {
+      "tag": "covers",
+      "frequency": 772,
+      "source_examples": "covers"
+    },
+    {
+      "tag": "new",
+      "frequency": 769,
+      "source_examples": "new"
+    },
+    {
+      "tag": "intense",
+      "frequency": 768,
+      "source_examples": "intense"
+    },
+    {
+      "tag": "alternative pop",
+      "frequency": 767,
+      "source_examples": "alternative pop"
+    },
+    {
+      "tag": "stoner rock",
+      "frequency": 760,
+      "source_examples": "stoner rock"
     },
     {
       "tag": "lo-fi",
@@ -396,9 +1026,789 @@
       "source_examples": "lo-fi"
     },
     {
+      "tag": "hot",
+      "frequency": 747,
+      "source_examples": "hot"
+    },
+    {
+      "tag": "guilty pleasures",
+      "frequency": 744,
+      "source_examples": "guilty pleasures"
+    },
+    {
+      "tag": "indietronica",
+      "frequency": 744,
+      "source_examples": "indietronica"
+    },
+    {
+      "tag": "2011",
+      "frequency": 740,
+      "source_examples": "2011"
+    },
+    {
+      "tag": "power metal",
+      "frequency": 738,
+      "source_examples": "power metal"
+    },
+    {
+      "tag": "adult contemporary",
+      "frequency": 728,
+      "source_examples": "adult contemporary"
+    },
+    {
+      "tag": "singer songwriter",
+      "frequency": 726,
+      "source_examples": "singer songwriter"
+    },
+    {
+      "tag": "bittersweet",
+      "frequency": 725,
+      "source_examples": "bittersweet"
+    },
+    {
+      "tag": "new york",
+      "frequency": 725,
+      "source_examples": "new york"
+    },
+    {
+      "tag": "1980s",
+      "frequency": 724,
+      "source_examples": "1980s"
+    },
+    {
+      "tag": "good shit",
+      "frequency": 723,
+      "source_examples": "good shit"
+    },
+    {
+      "tag": "experimental rock",
+      "frequency": 721,
+      "source_examples": "experimental rock"
+    },
+    {
+      "tag": "pretty",
+      "frequency": 720,
+      "source_examples": "pretty"
+    },
+    {
+      "tag": "2010",
+      "frequency": 715,
+      "source_examples": "2010"
+    },
+    {
+      "tag": "songs i absolutely love",
+      "frequency": 712,
+      "source_examples": "songs i absolutely love"
+    },
+    {
+      "tag": "gothic",
+      "frequency": 708,
+      "source_examples": "gothic"
+    },
+    {
+      "tag": "funny",
+      "frequency": 701,
+      "source_examples": "funny"
+    },
+    {
+      "tag": "lyrics",
+      "frequency": 697,
+      "source_examples": "lyrics"
+    },
+    {
+      "tag": "moody",
+      "frequency": 694,
+      "source_examples": "moody"
+    },
+    {
+      "tag": "80's",
+      "frequency": 694,
+      "source_examples": "80's"
+    },
+    {
+      "tag": "idm",
+      "frequency": 689,
+      "source_examples": "idm"
+    },
+    {
+      "tag": "swedish",
+      "frequency": 688,
+      "source_examples": "swedish"
+    },
+    {
+      "tag": "male",
+      "frequency": 680,
+      "source_examples": "male"
+    },
+    {
+      "tag": "female vocal",
+      "frequency": 678,
+      "source_examples": "female vocal"
+    },
+    {
+      "tag": "night",
+      "frequency": 677,
+      "source_examples": "night"
+    },
+    {
+      "tag": "ska",
+      "frequency": 672,
+      "source_examples": "ska"
+    },
+    {
+      "tag": "albums i own",
+      "frequency": 671,
+      "source_examples": "albums i own"
+    },
+    {
+      "tag": "rock band",
+      "frequency": 670,
+      "source_examples": "rock band"
+    },
+    {
+      "tag": "quirky",
+      "frequency": 670,
+      "source_examples": "quirky"
+    },
+    {
+      "tag": "best song ever",
+      "frequency": 670,
+      "source_examples": "best song ever"
+    },
+    {
+      "tag": "poprock",
+      "frequency": 669,
+      "source_examples": "poprock"
+    },
+    {
+      "tag": "retro",
+      "frequency": 669,
+      "source_examples": "retro"
+    },
+    {
+      "tag": "interesting",
+      "frequency": 658,
+      "source_examples": "interesting"
+    },
+    {
+      "tag": "nu-metal",
+      "frequency": 658,
+      "source_examples": "nu-metal"
+    },
+    {
+      "tag": "trance",
+      "frequency": 651,
+      "source_examples": "trance"
+    },
+    {
+      "tag": "easy",
+      "frequency": 648,
+      "source_examples": "easy"
+    },
+    {
+      "tag": "2009",
+      "frequency": 648,
+      "source_examples": "2009"
+    },
+    {
+      "tag": "2007",
+      "frequency": 646,
+      "source_examples": "2007"
+    },
+    {
+      "tag": "thrash",
+      "frequency": 644,
+      "source_examples": "thrash"
+    },
+    {
+      "tag": "indie folk",
+      "frequency": 643,
+      "source_examples": "indie folk"
+    },
+    {
+      "tag": "sing along",
+      "frequency": 643,
+      "source_examples": "sing along"
+    },
+    {
+      "tag": "latin rock",
+      "frequency": 642,
+      "source_examples": "latin rock"
+    },
+    {
+      "tag": "doom metal",
+      "frequency": 642,
+      "source_examples": "doom metal"
+    },
+    {
+      "tag": "melodic metal",
+      "frequency": 639,
+      "source_examples": "melodic metal"
+    },
+    {
+      "tag": "shoegaze",
+      "frequency": 638,
+      "source_examples": "shoegaze"
+    },
+    {
+      "tag": "drums",
+      "frequency": 638,
+      "source_examples": "drums"
+    },
+    {
+      "tag": "synth pop",
+      "frequency": 638,
+      "source_examples": "synth pop"
+    },
+    {
+      "tag": "speed metal",
+      "frequency": 636,
+      "source_examples": "speed metal"
+    },
+    {
+      "tag": "synth",
+      "frequency": 635,
+      "source_examples": "synth"
+    },
+    {
+      "tag": "best songs ever",
+      "frequency": 633,
+      "source_examples": "best songs ever"
+    },
+    {
+      "tag": "2014",
+      "frequency": 628,
+      "source_examples": "2014"
+    },
+    {
+      "tag": "energy",
+      "frequency": 626,
+      "source_examples": "energy"
+    },
+    {
+      "tag": "90s rock",
+      "frequency": 623,
+      "source_examples": "90s rock"
+    },
+    {
+      "tag": "modern rock",
+      "frequency": 617,
+      "source_examples": "modern rock"
+    },
+    {
+      "tag": "2006",
+      "frequency": 614,
+      "source_examples": "2006"
+    },
+    {
+      "tag": "2008",
+      "frequency": 613,
+      "source_examples": "2008"
+    },
+    {
+      "tag": "all the best",
+      "frequency": 612,
+      "source_examples": "all the best"
+    },
+    {
+      "tag": "spanish",
+      "frequency": 611,
+      "source_examples": "spanish"
+    },
+    {
+      "tag": "christian rock",
+      "frequency": 610,
+      "source_examples": "christian rock"
+    },
+    {
+      "tag": "folk-rock",
+      "frequency": 601,
+      "source_examples": "folk-rock"
+    },
+    {
+      "tag": "sensual",
+      "frequency": 598,
+      "source_examples": "sensual"
+    },
+    {
+      "tag": "sleep",
+      "frequency": 596,
+      "source_examples": "sleep"
+    },
+    {
+      "tag": "gangsta rap",
+      "frequency": 592,
+      "source_examples": "gangsta rap"
+    },
+    {
+      "tag": "avant-garde",
+      "frequency": 592,
+      "source_examples": "avant-garde"
+    },
+    {
+      "tag": "radio paradise",
+      "frequency": 580,
+      "source_examples": "radio paradise"
+    },
+    {
+      "tag": "radioparadise",
+      "frequency": 579,
+      "source_examples": "radioparadise"
+    },
+    {
+      "tag": "road trip",
+      "frequency": 579,
+      "source_examples": "road trip"
+    },
+    {
+      "tag": "ballads",
+      "frequency": 578,
+      "source_examples": "ballads"
+    },
+    {
+      "tag": "hard",
+      "frequency": 577,
+      "source_examples": "hard"
+    },
+    {
+      "tag": "addictive",
+      "frequency": 575,
+      "source_examples": "addictive"
+    },
+    {
+      "tag": "pop-punk",
+      "frequency": 574,
+      "source_examples": "pop-punk"
+    },
+    {
+      "tag": "high school",
+      "frequency": 571,
+      "source_examples": "high school"
+    },
+    {
+      "tag": "rocking out",
+      "frequency": 570,
+      "source_examples": "rocking out"
+    },
+    {
+      "tag": "black metal",
+      "frequency": 570,
+      "source_examples": "black metal"
+    },
+    {
+      "tag": "r and b",
+      "frequency": 569,
+      "source_examples": "r and b"
+    },
+    {
+      "tag": "industrial metal",
+      "frequency": 566,
+      "source_examples": "industrial metal"
+    },
+    {
+      "tag": "bagel",
+      "frequency": 565,
+      "source_examples": "bagel"
+    },
+    {
+      "tag": "legend",
+      "frequency": 564,
+      "source_examples": "legend"
+    },
+    {
+      "tag": "aggressive",
+      "frequency": 564,
+      "source_examples": "aggressive"
+    },
+    {
+      "tag": "perfection",
+      "frequency": 564,
+      "source_examples": "perfection"
+    },
+    {
+      "tag": "smooth jazz",
+      "frequency": 562,
+      "source_examples": "smooth jazz"
+    },
+    {
+      "tag": "southern rock",
+      "frequency": 562,
+      "source_examples": "southern rock"
+    },
+    {
+      "tag": "arena rock",
+      "frequency": 553,
+      "source_examples": "arena rock"
+    },
+    {
+      "tag": "feelgood",
+      "frequency": 552,
+      "source_examples": "feelgood"
+    },
+    {
+      "tag": "download",
+      "frequency": 552,
+      "source_examples": "download"
+    },
+    {
+      "tag": "rockpop",
+      "frequency": 551,
+      "source_examples": "rockpop"
+    },
+    {
+      "tag": "ost",
+      "frequency": 550,
+      "source_examples": "ost"
+    },
+    {
+      "tag": "deathcore",
+      "frequency": 549,
+      "source_examples": "deathcore"
+    },
+    {
+      "tag": "underground hip hop",
+      "frequency": 547,
+      "source_examples": "underground hip hop"
+    },
+    {
+      "tag": "winter",
+      "frequency": 546,
+      "source_examples": "winter"
+    },
+    {
+      "tag": "amayzes loved",
+      "frequency": 544,
+      "source_examples": "amayzes loved"
+    },
+    {
+      "tag": "alt-country",
+      "frequency": 541,
+      "source_examples": "alt-country"
+    },
+    {
+      "tag": "death",
+      "frequency": 540,
+      "source_examples": "death"
+    },
+    {
+      "tag": "soulful",
+      "frequency": 539,
+      "source_examples": "soulful"
+    },
+    {
+      "tag": "1970s",
+      "frequency": 533,
+      "source_examples": "1970s"
+    },
+    {
+      "tag": "neo-soul",
+      "frequency": 529,
+      "source_examples": "neo-soul"
+    },
+    {
+      "tag": "2005",
+      "frequency": 529,
+      "source_examples": "2005"
+    },
+    {
+      "tag": "music",
+      "frequency": 527,
+      "source_examples": "music"
+    },
+    {
+      "tag": "songs i love",
+      "frequency": 526,
+      "source_examples": "songs i love"
+    },
+    {
+      "tag": "beats",
+      "frequency": 524,
+      "source_examples": "beats"
+    },
+    {
+      "tag": "trippy",
+      "frequency": 523,
+      "source_examples": "trippy"
+    },
+    {
+      "tag": "german",
+      "frequency": 522,
+      "source_examples": "german"
+    },
+    {
+      "tag": "chilled",
+      "frequency": 521,
+      "source_examples": "chilled"
+    },
+    {
+      "tag": "rockin",
+      "frequency": 519,
+      "source_examples": "rockin"
+    },
+    {
+      "tag": "underground hip-hop",
+      "frequency": 518,
+      "source_examples": "underground hip-hop"
+    },
+    {
+      "tag": "freedom",
+      "frequency": 518,
+      "source_examples": "freedom"
+    },
+    {
+      "tag": "fast",
+      "frequency": 514,
+      "source_examples": "fast"
+    },
+    {
+      "tag": "american artist",
+      "frequency": 510,
+      "source_examples": "american artist"
+    },
+    {
+      "tag": "vocals",
+      "frequency": 508,
+      "source_examples": "vocals"
+    },
+    {
+      "tag": "inspirational",
+      "frequency": 503,
+      "source_examples": "inspirational"
+    },
+    {
+      "tag": "gothic metal",
+      "frequency": 502,
+      "source_examples": "gothic metal"
+    },
+    {
+      "tag": "2003",
+      "frequency": 500,
+      "source_examples": "2003"
+    },
+    {
+      "tag": "great songs",
+      "frequency": 499,
+      "source_examples": "great songs"
+    },
+    {
+      "tag": "comedy",
+      "frequency": 493,
+      "source_examples": "comedy"
+    },
+    {
+      "tag": "guitar solo",
+      "frequency": 493,
+      "source_examples": "guitar solo"
+    },
+    {
+      "tag": "late night",
+      "frequency": 493,
+      "source_examples": "late night"
+    },
+    {
+      "tag": "shit",
+      "frequency": 492,
+      "source_examples": "shit"
+    },
+    {
+      "tag": "i like",
+      "frequency": 490,
+      "source_examples": "i like"
+    },
+    {
+      "tag": "powerpop",
+      "frequency": 490,
+      "source_examples": "powerpop"
+    },
+    {
+      "tag": "good song",
+      "frequency": 488,
+      "source_examples": "good song"
+    },
+    {
+      "tag": "world music",
+      "frequency": 487,
+      "source_examples": "world music"
+    },
+    {
+      "tag": "crossover",
+      "frequency": 484,
+      "source_examples": "crossover"
+    },
+    {
+      "tag": "rock band dlc",
+      "frequency": 480,
+      "source_examples": "rock band dlc"
+    },
+    {
+      "tag": "australian",
+      "frequency": 478,
+      "source_examples": "australian"
+    },
+    {
+      "tag": "brutal death metal",
+      "frequency": 476,
+      "source_examples": "brutal death metal"
+    },
+    {
+      "tag": "guitar virtuoso",
+      "frequency": 476,
+      "source_examples": "guitar virtuoso"
+    },
+    {
+      "tag": "i love this song",
+      "frequency": 475,
+      "source_examples": "i love this song"
+    },
+    {
+      "tag": "piano rock",
+      "frequency": 473,
+      "source_examples": "piano rock"
+    },
+    {
+      "tag": "dance pop",
+      "frequency": 473,
+      "source_examples": "dance pop"
+    },
+    {
+      "tag": "import",
+      "frequency": 470,
+      "source_examples": "import"
+    },
+    {
+      "tag": "wow",
+      "frequency": 467,
+      "source_examples": "wow"
+    },
+    {
       "tag": "dance-pop",
       "frequency": 466,
       "source_examples": "dance-pop"
+    },
+    {
+      "tag": "good music",
+      "frequency": 463,
+      "source_examples": "good music"
+    },
+    {
+      "tag": "over 5 minutes long",
+      "frequency": 463,
+      "source_examples": "over 5 minutes long"
+    },
+    {
+      "tag": "country rock",
+      "frequency": 462,
+      "source_examples": "country rock"
+    },
+    {
+      "tag": "work",
+      "frequency": 462,
+      "source_examples": "work"
+    },
+    {
+      "tag": "classic metal",
+      "frequency": 462,
+      "source_examples": "classic metal"
+    },
+    {
+      "tag": "england",
+      "frequency": 461,
+      "source_examples": "england"
+    },
+    {
+      "tag": "club",
+      "frequency": 460,
+      "source_examples": "club"
+    },
+    {
+      "tag": "davaho53",
+      "frequency": 459,
+      "source_examples": "davaho53"
+    },
+    {
+      "tag": "slgdmbestof",
+      "frequency": 459,
+      "source_examples": "slgdmbestof"
+    },
+    {
+      "tag": "fusion",
+      "frequency": 452,
+      "source_examples": "fusion"
+    },
+    {
+      "tag": "groove metal",
+      "frequency": 451,
+      "source_examples": "groove metal"
+    },
+    {
+      "tag": "strings",
+      "frequency": 449,
+      "source_examples": "strings"
+    },
+    {
+      "tag": "garage",
+      "frequency": 448,
+      "source_examples": "garage"
+    },
+    {
+      "tag": "hypnotic",
+      "frequency": 448,
+      "source_examples": "hypnotic"
+    },
+    {
+      "tag": "gothic rock",
+      "frequency": 447,
+      "source_examples": "gothic rock"
+    },
+    {
+      "tag": "quiet",
+      "frequency": 446,
+      "source_examples": "quiet"
+    },
+    {
+      "tag": "post hardcore",
+      "frequency": 446,
+      "source_examples": "post hardcore"
+    },
+    {
+      "tag": "acid jazz",
+      "frequency": 444,
+      "source_examples": "acid jazz"
+    },
+    {
+      "tag": "aitch",
+      "frequency": 444,
+      "source_examples": "aitch"
+    },
+    {
+      "tag": "megadeth",
+      "frequency": 443,
+      "source_examples": "megadeth"
+    },
+    {
+      "tag": "nyc",
+      "frequency": 443,
+      "source_examples": "nyc"
+    },
+    {
+      "tag": "modern country",
+      "frequency": 441,
+      "source_examples": "modern country"
+    },
+    {
+      "tag": "morning",
+      "frequency": 439,
+      "source_examples": "morning"
+    },
+    {
+      "tag": "classics",
+      "frequency": 437,
+      "source_examples": "classics"
+    },
+    {
+      "tag": "noise",
+      "frequency": 437,
+      "source_examples": "noise"
     },
     {
       "tag": "dubstep",
@@ -406,24 +1816,204 @@
       "source_examples": "dubstep"
     },
     {
-      "tag": "funk metal",
-      "frequency": 229,
-      "source_examples": "funk metal"
+      "tag": "alternative rap",
+      "frequency": 431,
+      "source_examples": "alternative rap"
     },
     {
-      "tag": "rap rock",
-      "frequency": 194,
-      "source_examples": "rap rock"
+      "tag": "weird",
+      "frequency": 429,
+      "source_examples": "weird"
     },
     {
-      "tag": "rap metal",
-      "frequency": 182,
-      "source_examples": "rap metal"
+      "tag": "melodic hardcore",
+      "frequency": 429,
+      "source_examples": "melodic hardcore"
     },
     {
-      "tag": "afrobeat",
-      "frequency": 53,
-      "source_examples": "afrobeat"
+      "tag": "slow jams",
+      "frequency": 428,
+      "source_examples": "slow jams"
+    },
+    {
+      "tag": "east coast rap",
+      "frequency": 426,
+      "source_examples": "east coast rap"
+    },
+    {
+      "tag": "depressing",
+      "frequency": 426,
+      "source_examples": "depressing"
+    },
+    {
+      "tag": "gay",
+      "frequency": 426,
+      "source_examples": "gay"
+    },
+    {
+      "tag": "soothing",
+      "frequency": 425,
+      "source_examples": "soothing"
+    },
+    {
+      "tag": "2002",
+      "frequency": 424,
+      "source_examples": "2002"
+    },
+    {
+      "tag": "eargasm",
+      "frequency": 423,
+      "source_examples": "eargasm"
+    },
+    {
+      "tag": "darkwave",
+      "frequency": 423,
+      "source_examples": "darkwave"
+    },
+    {
+      "tag": "heartbreak",
+      "frequency": 420,
+      "source_examples": "heartbreak"
+    },
+    {
+      "tag": "2004",
+      "frequency": 418,
+      "source_examples": "2004"
+    },
+    {
+      "tag": "70's",
+      "frequency": 418,
+      "source_examples": "70's"
+    },
+    {
+      "tag": "symphonic metal",
+      "frequency": 416,
+      "source_examples": "symphonic metal"
+    },
+    {
+      "tag": "french",
+      "frequency": 416,
+      "source_examples": "french"
+    },
+    {
+      "tag": "brazilian",
+      "frequency": 415,
+      "source_examples": "brazilian"
+    },
+    {
+      "tag": "banned",
+      "frequency": 414,
+      "source_examples": "banned"
+    },
+    {
+      "tag": "wrif-fm",
+      "frequency": 412,
+      "source_examples": "wrif-fm"
+    },
+    {
+      "tag": "grindcore",
+      "frequency": 411,
+      "source_examples": "grindcore"
+    },
+    {
+      "tag": "west coast",
+      "frequency": 410,
+      "source_examples": "west coast"
+    },
+    {
+      "tag": "melodic metalcore",
+      "frequency": 410,
+      "source_examples": "melodic metalcore"
+    },
+    {
+      "tag": "sound storm",
+      "frequency": 410,
+      "source_examples": "sound storm"
+    },
+    {
+      "tag": "hair metal",
+      "frequency": 409,
+      "source_examples": "hair metal"
+    },
+    {
+      "tag": "gospel",
+      "frequency": 408,
+      "source_examples": "gospel"
+    },
+    {
+      "tag": "yeah",
+      "frequency": 406,
+      "source_examples": "yeah"
+    },
+    {
+      "tag": "industrial rock",
+      "frequency": 405,
+      "source_examples": "industrial rock"
+    },
+    {
+      "tag": "ska punk",
+      "frequency": 405,
+      "source_examples": "ska punk"
+    },
+    {
+      "tag": "brasil",
+      "frequency": 404,
+      "source_examples": "brasil"
+    },
+    {
+      "tag": "power",
+      "frequency": 403,
+      "source_examples": "power"
+    },
+    {
+      "tag": "crazy",
+      "frequency": 403,
+      "source_examples": "crazy"
+    },
+    {
+      "tag": "goth",
+      "frequency": 402,
+      "source_examples": "goth"
+    },
+    {
+      "tag": "life",
+      "frequency": 401,
+      "source_examples": "life"
+    },
+    {
+      "tag": "fm4",
+      "frequency": 399,
+      "source_examples": "fm4"
+    },
+    {
+      "tag": "rainy day",
+      "frequency": 399,
+      "source_examples": "rainy day"
+    },
+    {
+      "tag": "jam",
+      "frequency": 397,
+      "source_examples": "jam"
+    },
+    {
+      "tag": "2000",
+      "frequency": 397,
+      "source_examples": "2000"
+    },
+    {
+      "tag": "makes me cry",
+      "frequency": 397,
+      "source_examples": "makes me cry"
+    },
+    {
+      "tag": "dub",
+      "frequency": 395,
+      "source_examples": "dub"
+    },
+    {
+      "tag": "sentimental",
+      "frequency": 395,
+      "source_examples": "sentimental"
     }
   ]
 }

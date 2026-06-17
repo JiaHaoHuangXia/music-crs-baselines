@@ -1,83 +1,401 @@
 tag,frequency,source_examples
-rock,79680,rock; pop rock; soft rock; rock n roll; folk rock
-metal,31660,metal; metalcore; progressive metal; power metal; nu-metal
-alternative,31601,alternative; alternative metal; alternative punk; alternative pop; alternative rap
-pop,30121,pop; power pop; synth pop; powerpop; art pop
-electronic,12754,electronic; electronic rock; eletronic; indie electronic; electronic pop
-hip-hop,11895,hip-hop / rap; hip-hop; trip-hop; underground hip-hop; real hip-hop
-punk,11738,punk; pop-punk; ska punk; post punk; skate punk
-dance,11177,dance; dance pop; romance; danceable; dance rock
-hard rock,10725,hard rock; hard; classic hard rock; 90s hard rock; 80s hard rock
-indie,10550,indie; indietronica; indie folk; indiepop; indie-rock
-alternative rock,9831,alternative rock; 90s alternative rock
-chill,9786,chill; chill out; chilled; childhood; aitchchill
-soul,9738,soul; r&b / soul; soulful; neo-soul; neo soul
-jazz,9351,jazz; jazzy; smooth jazz; acid jazz; nu jazz
-classic rock,9141,classic rock; classic; classics; classy; classic track
-emo,8432,emo; memories; emotional; emocore; emotion
-funk,8222,fun; funk; funky; funny; metro funky
-singer-songwriter,7974,singer-songwriter; singer / songwriter; singer songwriter; songwriter; singer-songwriters
-country,7260,country; alt-country; country rock; modern country; classic country
-soundtrack,6603,soundtrack; soundtracks; movie soundtrack; zaplovedtracks; lovedtrack
-rap,6491,rap; gangsta rap; east coast rap; rapcore; trap
-hip hop,6443,hip hop; hiphop; underground hip hop; true hip hop; east coast hip hop
-blues,6429,blues; blues rock; rhythm and blues; blues-rock; blue
-heavy metal,6050,heavy metal; heavy; classic heavy metal; 90s heavy metal; 80s heavy metal
-hardcore,5830,hardcore; hardcore punk; post hardcore; melodic hardcore; grindcore
+rock,36164,rock
+alternative,23570,alternative
+pop,21664,pop
+metal,11553,metal
+electronic,11276,electronic
+alternative rock,9805,alternative rock
+hard rock,8449,hard rock
+indie,8037,indie
+dance,7183,dance
 indie rock,5755,indie rock
-electro,5743,electro; electropop; electro pop; electro-pop; electroclash
-death metal,5678,death metal; melodic death metal; death; brutal death metal; technical death metal
-progressive rock,5545,progressive rock; progressive; aggressive; depressive; progressive deathcore
-experimental,5373,experimental; experimental rock; sentimental; experimental metal; experimental hip hop
-latin,5087,latin; latin pop; latin rock; latino; rock latino
-psychedelic,4979,psychedelic; psychedelic rock; psychedelic pop; neo-psychedelia; psychedelia
-melancholic,4914,melancholy; melancholic; melancholia; melancholie; nieco melancholicke
-chillout,4848,chillout; sellout; chillout tracy
-folk,4756,folk; folk pop; folktronica; freak folk; contemporary folk
-instrumental,4573,instrumental; instrumental rock; instrumental hip-hop; instrumental hip hop; instrumentals
-relaxing,4468,relax; relaxing; relaxed; relaxation; relaxing mood
-acoustic,4319,acoustic; acoustic rock; acoustic guitar; acoustic rhythm guitars; acoustic rhythm piano
-ambient,4210,ambient; dark ambient; ambient techno; ambient pop; ambience
-new wave,4046,new wave; new; new york; new york city; new rave
-sad,3657,sad; sad songs; sadness; sadcore; sad song
-electronica,3606,electronica; electronica influences; electronica / dance; electronica dance; eletronica
-downtempo,3604,downtempo; metro downtempo; uptempo; down tempo; midtempo
-happy,3440,happy; makes me happy; happiness; 123 drippy sappy; happy songs
-dream pop,3279,dreamy; dream pop; dream; dreams; dreaming
-thrash metal,3100,thrash metal; thrash; old school thrash metal; mendigao thrash; bay area thrash metal
-punk rock,3044,punk rock; gwds punk rock; folk punk rock
-grunge,2961,grunge; post-grunge; post grunge; grunge rock; post- grunge
-rnb,2845,rnb; contemporary rnb; 90s rnb; modern rnb; rnb number ones
+punk,5501,punk
+classic rock,5208,classic rock
+chill,5175,chill
+hip-hop / rap,4853,hip-hop / rap
+mellow,4763,mellow
+chillout,4745,chillout
+singer-songwriter,4511,singer-songwriter
+male vocalist,4208,male vocalist
+hip-hop,3820,hip-hop
+experimental,3812,experimental
+pop rock,3781,pop rock
+jazz,3623,jazz
+soul,3495,soul
+heavy metal,3437,heavy metal
+epic,3394,epic
+folk,3388,folk
+love at first listen,3382,love at first listen
+instrumental,3300,instrumental
+country,3292,country
+catchy,3286,catchy
+guitar,3272,guitar
+acoustic,3190,acoustic
+ambient,3131,ambient
+sexy,3099,sexy
+rap,3099,rap
+soundtrack,3078,soundtrack
+emo,3058,emo
+electronica,3047,electronica
+hardcore,3007,hardcore
+classic,3003,classic
+hip hop,2999,hip hop
+sad,2983,sad
+punk rock,2976,punk rock
+easy listening,2932,easy listening
+r&b / soul,2855,r&b / soul
+female vocalist,2824,female vocalist
+2000s,2797,2000s
+fun,2781,fun
 indie pop,2737,indie pop
-dark,2583,dark; darkwave; dark wave; darkness; dark cabaret
-industrial,2580,industrial; industrial metal; industrial rock; electro-industrial; post-industrial
-classical,2467,classical; contemporary classical; neoclassical; musical; modern classical
-energetic,2375,energetic; energy; high energy; energizer; nocna energia
-synthpop,2299,synthpop; synth; synthesizer; minimal synth; synthesizers
-house,2220,house; deep house; progressive house; tech house; french house
-gothic,2209,gothic; gothic metal; gothic rock; goth; gothenburg
-nostalgic,2166,nostalgia; nostalgic; moja nostalgia
-post-hardcore,2129,post-hardcore; post-nerdcore; progressive post-hardcore; real post-hardcore
-trip hop,1857,trip hop; road trip; triphop; roadtrip; trip
-disco,1777,disco; rakt over disc; discoverockult; nu disco; dischord
-drum and bass,1740,bass; drum and bass; drum n bass; drum & bass; drum
-britpop,1728,britpop; brit; britney spears; britney; britannique
-screamo,1577,screamo; scream; screaming; not screamo; awesome screaming
+progressive rock,2710,progressive rock
+party,2639,party
+soundtracks,2578,soundtracks
+happy,2517,happy
+melancholy,2509,melancholy
+latin,2498,latin
+rnb,2447,rnb
+blues,2436,blues
+funk,2357,funk
+soft rock,2354,soft rock
+psychedelic,2336,psychedelic
+fucking awesome,2295,fucking awesome
+oldies,2271,oldies
+upbeat,2169,upbeat
+melancholic,2164,melancholic
+ballad,2134,ballad
+piano,2126,piano
+metalcore,2112,metalcore
+summer,2076,summer
+fip,2052,fip
+relax,2043,relax
+love it,2042,love it
+relaxing,2027,relaxing
+downtempo,2026,downtempo
+alternative metal,1998,alternative metal
+atmospheric,1925,atmospheric
+singer / songwriter,1901,singer / songwriter
+post-hardcore,1838,post-hardcore
+female,1811,female
+2010s,1803,2010s
+romantic,1768,romantic
+memories,1730,memories
+electro,1712,electro
+smooth,1687,smooth
+rock n roll,1682,rock n roll
+dark,1680,dark
+progressive metal,1661,progressive metal
+dreamy,1629,dreamy
+energetic,1624,energetic
+new wave,1615,new wave
+death metal,1614,death metal
+love songs,1614,love songs
+funky,1592,funky
+sweet,1592,sweet
+female vocals,1590,female vocals
+progressive,1549,progressive
+great lyrics,1545,great lyrics
+christian,1545,christian
 pop punk,1535,pop punk
-trance,1513,trance; france; trancecore; psytrance; progressive trance
-reggae,1494,reggae; reggaeton; roots reggae; reggae fusion; reggae rock
-garage rock,1469,garage rock; garage; garage rock revival; uk garage; future garage
+classical,1530,classical
+lounge,1513,lounge
+best,1509,best
+grunge,1501,grunge
+great song,1478,great song
+live,1455,live
+slow,1454,slow
+synthpop,1436,synthpop
+like,1414,like
 r&b,1402,r&b
-post-punk,1391,post-punk; post-punk revival
+driving,1397,driving
+blues rock,1394,blues rock
+folk rock,1391,folk rock
+latin pop,1389,latin pop
+lovely,1370,lovely
+thrash metal,1365,thrash metal
+perfect,1365,perfect
 nu metal,1357,nu metal
-techno,1277,techno; minimal techno; frauen und technik; acid techno; immortal technique
-angry,1056,angry; im not angry; angry songs; angry music
-shoegaze,872,shoegaze; shoegazer; shoegazefan; shoegazing; shoegazing goodness
-club,761,club; halftoned singles club; baltimore music club; bobbyscdclub; club music
+cover,1350,cover
+trip-hop,1342,trip-hop
+melodic,1339,melodic
+soft,1335,soft
+screamo,1310,screamo
+english,1310,english
+vocal,1306,vocal
+english lyrics,1302,english lyrics
+house,1292,house
+psychedelic rock,1280,psychedelic rock
+post-punk,1278,post-punk
+nostalgia,1268,nostalgia
+emotional,1264,emotional
+britpop,1217,britpop
+masterpiece,1211,masterpiece
+electropop,1197,electropop
+good stuff,1196,good stuff
+reggae,1187,reggae
+k1r7m,1187,k1r7m
+calm,1176,calm
+groovy,1160,groovy
+industrial,1155,industrial
+heavy,1153,heavy
+techno,1113,techno
+feel good,1111,feel good
+old school,1101,old school
+california,1090,california
+alt rock,1088,alt rock
+somafm,1063,somafm
+1990s,1061,1990s
+male vocals,1053,male vocals
+alternative punk,1028,alternative punk
+sex,996,sex
+brilliant,991,brilliant
+art rock,987,art rock
+uplifting,983,uplifting
+rock and roll,978,rock and roll
+cute,975,cute
+urban,959,urban
+melodic death metal,958,melodic death metal
+love song,945,love song
+disco,940,disco
+canadian,940,canadian
+angry,937,angry
+post-rock,932,post-rock
+album rock,927,album rock
+post-grunge,903,post-grunge
+rhythm and blues,902,rhythm and blues
+vugube62,890,vugube62
+haunting,879,haunting
+genius,877,genius
+garage rock,872,garage rock
+nostalgic,869,nostalgic
+ethereal,867,ethereal
+emocore,857,emocore
+world,854,world
+americana,843,americana
+groove,841,groove
+bass,840,bass
+new age,840,new age
+hiphop,828,hiphop
+powerful,826,powerful
+2012,825,2012
+faves,825,faves
+political,820,political
+power pop,815,power pop
+guilty pleasure,814,guilty pleasure
+others,813,others
+chill out,811,chill out
+glam rock,808,glam rock
+dream pop,798,dream pop
+pop-rock,796,pop-rock
+2013,792,2013
+eclectonia,792,eclectonia
+top 40,791,top 40
+trip hop,779,trip hop
+jazzy,779,jazzy
+the best,779,the best
+other,773,other
+hardcore punk,773,hardcore punk
+covers,772,covers
+new,769,new
+intense,768,intense
+alternative pop,767,alternative pop
+stoner rock,760,stoner rock
 lo-fi,758,lo-fi
+hot,747,hot
+guilty pleasures,744,guilty pleasures
+indietronica,744,indietronica
+2011,740,2011
+power metal,738,power metal
+adult contemporary,728,adult contemporary
+singer songwriter,726,singer songwriter
+bittersweet,725,bittersweet
+new york,725,new york
+1980s,724,1980s
+good shit,723,good shit
+experimental rock,721,experimental rock
+pretty,720,pretty
+2010,715,2010
+songs i absolutely love,712,songs i absolutely love
+gothic,708,gothic
+funny,701,funny
+lyrics,697,lyrics
+moody,694,moody
+80's,694,80's
+idm,689,idm
+swedish,688,swedish
+male,680,male
+female vocal,678,female vocal
+night,677,night
+ska,672,ska
+albums i own,671,albums i own
+rock band,670,rock band
+quirky,670,quirky
+best song ever,670,best song ever
+poprock,669,poprock
+retro,669,retro
+interesting,658,interesting
+nu-metal,658,nu-metal
+trance,651,trance
+easy,648,easy
+2009,648,2009
+2007,646,2007
+thrash,644,thrash
+indie folk,643,indie folk
+sing along,643,sing along
+latin rock,642,latin rock
+doom metal,642,doom metal
+melodic metal,639,melodic metal
+shoegaze,638,shoegaze
+drums,638,drums
+synth pop,638,synth pop
+speed metal,636,speed metal
+synth,635,synth
+best songs ever,633,best songs ever
+2014,628,2014
+energy,626,energy
+90s rock,623,90s rock
+modern rock,617,modern rock
+2006,614,2006
+2008,613,2008
+all the best,612,all the best
+spanish,611,spanish
+christian rock,610,christian rock
+folk-rock,601,folk-rock
+sensual,598,sensual
+sleep,596,sleep
+gangsta rap,592,gangsta rap
+avant-garde,592,avant-garde
+radio paradise,580,radio paradise
+radioparadise,579,radioparadise
+road trip,579,road trip
+ballads,578,ballads
+hard,577,hard
+addictive,575,addictive
+pop-punk,574,pop-punk
+high school,571,high school
+rocking out,570,rocking out
+black metal,570,black metal
+r and b,569,r and b
+industrial metal,566,industrial metal
+bagel,565,bagel
+legend,564,legend
+aggressive,564,aggressive
+perfection,564,perfection
+smooth jazz,562,smooth jazz
+southern rock,562,southern rock
+arena rock,553,arena rock
+feelgood,552,feelgood
+download,552,download
+rockpop,551,rockpop
+ost,550,ost
+deathcore,549,deathcore
+underground hip hop,547,underground hip hop
+winter,546,winter
+amayzes loved,544,amayzes loved
+alt-country,541,alt-country
+death,540,death
+soulful,539,soulful
+1970s,533,1970s
+neo-soul,529,neo-soul
+2005,529,2005
+music,527,music
+songs i love,526,songs i love
+beats,524,beats
+trippy,523,trippy
+german,522,german
+chilled,521,chilled
+rockin,519,rockin
+underground hip-hop,518,underground hip-hop
+freedom,518,freedom
+fast,514,fast
+american artist,510,american artist
+vocals,508,vocals
+inspirational,503,inspirational
+gothic metal,502,gothic metal
+2003,500,2003
+great songs,499,great songs
+comedy,493,comedy
+guitar solo,493,guitar solo
+late night,493,late night
+shit,492,shit
+i like,490,i like
+powerpop,490,powerpop
+good song,488,good song
+world music,487,world music
+crossover,484,crossover
+rock band dlc,480,rock band dlc
+australian,478,australian
+brutal death metal,476,brutal death metal
+guitar virtuoso,476,guitar virtuoso
+i love this song,475,i love this song
+piano rock,473,piano rock
+dance pop,473,dance pop
+import,470,import
+wow,467,wow
 dance-pop,466,dance-pop
+good music,463,good music
+over 5 minutes long,463,over 5 minutes long
+country rock,462,country rock
+work,462,work
+classic metal,462,classic metal
+england,461,england
+club,460,club
+davaho53,459,davaho53
+slgdmbestof,459,slgdmbestof
+fusion,452,fusion
+groove metal,451,groove metal
+strings,449,strings
+garage,448,garage
+hypnotic,448,hypnotic
+gothic rock,447,gothic rock
+quiet,446,quiet
+post hardcore,446,post hardcore
+acid jazz,444,acid jazz
+aitch,444,aitch
+megadeth,443,megadeth
+nyc,443,nyc
+modern country,441,modern country
+morning,439,morning
+classics,437,classics
+noise,437,noise
 dubstep,436,dubstep
-funk metal,229,funk metal
-rap rock,194,rap rock
-rap metal,182,rap metal
-afrobeat,53,afrobeat
+alternative rap,431,alternative rap
+weird,429,weird
+melodic hardcore,429,melodic hardcore
+slow jams,428,slow jams
+east coast rap,426,east coast rap
+depressing,426,depressing
+gay,426,gay
+soothing,425,soothing
+2002,424,2002
+eargasm,423,eargasm
+darkwave,423,darkwave
+heartbreak,420,heartbreak
+2004,418,2004
+70's,418,70's
+symphonic metal,416,symphonic metal
+french,416,french
+brazilian,415,brazilian
+banned,414,banned
+wrif-fm,412,wrif-fm
+grindcore,411,grindcore
+west coast,410,west coast
+melodic metalcore,410,melodic metalcore
+sound storm,410,sound storm
+hair metal,409,hair metal
+gospel,408,gospel
+yeah,406,yeah
+industrial rock,405,industrial rock
+ska punk,405,ska punk
+brasil,404,brasil
+power,403,power
+crazy,403,crazy
+goth,402,goth
+life,401,life
+fm4,399,fm4
+rainy day,399,rainy day
+jam,397,jam
+2000,397,2000
+makes me cry,397,makes me cry
+dub,395,dub
+sentimental,395,sentimental

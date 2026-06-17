@@ -1,9 +1,9 @@
 """
 Create a controlled tag whitelist from the TalkPlay track metadata dataset.
 
-The goal is not to keep every frequent tag. The goal is to create a compact,
-music-focused vocabulary that can later be used as a controlled replacement for
-raw tag_list text in embedding retrieval experiments.
+The whitelist can be built in two ways:
+- popular: keep the most frequent clean catalog tags.
+- music_vocabulary: map clean catalog tags to a compact music-focused vocabulary.
 """
 
 from __future__ import annotations
@@ -243,6 +243,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Create a music-focused tag whitelist from track metadata.")
     parser.add_argument("--dataset_name", default=DATASET_NAME)
     parser.add_argument("--splits", nargs="+", default=DEFAULT_SPLITS)
+    parser.add_argument(
+        "--selection_method",
+        choices=["popular", "music_vocabulary"],
+        default="popular",
+        help=(
+            "'popular' keeps the most frequent clean catalog tags. "
+            "'music_vocabulary' maps tags to a compact predefined music vocabulary."
+        ),
+    )
     parser.add_argument("--min_frequency", type=int, default=25)
     parser.add_argument("--max_tags", type=int, default=400)
     parser.add_argument(
@@ -271,10 +280,12 @@ def main() -> None:
             if tag:
                 counts[tag] += 1
 
-    match_vocabulary = vocabulary_matcher(MUSIC_VOCABULARY)
     canonical_counts: Counter[str] = Counter()
     canonical_sources: dict[str, Counter[str]] = defaultdict(Counter)
     rejected_counts = Counter()
+    match_vocabulary = None
+    if args.selection_method == "music_vocabulary":
+        match_vocabulary = vocabulary_matcher(MUSIC_VOCABULARY)
 
     for tag, frequency in counts.most_common():
         if frequency < args.min_frequency:
@@ -287,15 +298,18 @@ def main() -> None:
             rejected_counts["bad_shape"] += 1
             continue
 
-        exact_term = is_exact_or_contained_music_term(tag)
-        if exact_term is not None:
-            canonical_tag = exact_term
-            similarity = 1.0 if tag == exact_term else 0.95
+        if args.selection_method == "popular":
+            canonical_tag = tag
         else:
-            canonical_tag, similarity = match_vocabulary(tag)
-            if similarity < args.min_vocab_similarity:
-                rejected_counts["low_vocab_similarity"] += 1
-                continue
+            exact_term = is_exact_or_contained_music_term(tag)
+            if exact_term is not None:
+                canonical_tag = exact_term
+                similarity = 1.0 if tag == exact_term else 0.95
+            else:
+                canonical_tag, similarity = match_vocabulary(tag)
+                if similarity < args.min_vocab_similarity:
+                    rejected_counts["low_vocab_similarity"] += 1
+                    continue
 
         canonical_counts[canonical_tag] += frequency
         canonical_sources[canonical_tag][tag] += frequency
@@ -324,11 +338,16 @@ def main() -> None:
             {
                 "dataset_name": args.dataset_name,
                 "splits": args.splits,
+                "selection_method": args.selection_method,
                 "min_frequency": args.min_frequency,
                 "max_tags": args.max_tags,
                 "max_words": args.max_words,
                 "min_vocab_similarity": args.min_vocab_similarity,
-                "method": "frequency + tag-shape rules + character-ngram similarity to controlled music vocabulary",
+                "method": (
+                    "frequency + noise/tag-shape rules"
+                    if args.selection_method == "popular"
+                    else "frequency + tag-shape rules + character-ngram similarity to controlled music vocabulary"
+                ),
                 "rejected_counts": dict(rejected_counts),
                 "tags": candidates,
             },

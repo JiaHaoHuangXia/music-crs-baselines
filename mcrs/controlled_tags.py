@@ -32,43 +32,47 @@ def iter_tags(value: Any):
 
 
 @lru_cache(maxsize=4)
-def load_tag_whitelist(path: str | None = None) -> dict[str, str]:
+def load_tag_whitelist(path: str | None = None) -> tuple[dict[str, str], dict[str, int]]:
     whitelist_path = Path(path) if path else DEFAULT_WHITELIST_PATH
     if not whitelist_path.exists():
-        return {}
+        return {}, {}
 
     with whitelist_path.open("r", encoding="utf-8") as file:
         data = json.load(file)
 
     mapping: dict[str, str] = {}
-    for item in data.get("tags", []):
+    ranks: dict[str, int] = {}
+    for rank, item in enumerate(data.get("tags", [])):
         canonical = normalize_tag(item.get("tag", ""))
         if not canonical:
             continue
         mapping[canonical] = canonical
+        ranks[canonical] = min(rank, ranks.get(canonical, rank))
         for source in str(item.get("source_examples", "")).split(";"):
             source = normalize_tag(source)
             if source:
                 mapping[source] = canonical
-    return mapping
+    return mapping, ranks
 
 
 def controlled_tags(value: Any, max_tags: int = 8, whitelist_path: str | None = None) -> list[str]:
-    whitelist = load_tag_whitelist(whitelist_path)
+    whitelist, ranks = load_tag_whitelist(whitelist_path)
     if not whitelist:
         return []
 
-    tags = []
+    first_seen: dict[str, int] = {}
     seen = set()
-    for raw_tag in iter_tags(value):
+    for index, raw_tag in enumerate(iter_tags(value)):
         tag = normalize_tag(raw_tag)
         canonical = whitelist.get(tag)
         if canonical and canonical not in seen:
             seen.add(canonical)
-            tags.append(canonical)
-        if len(tags) >= max_tags:
-            break
-    return tags
+            first_seen[canonical] = index
+
+    return sorted(
+        seen,
+        key=lambda tag: (ranks.get(tag, len(ranks)), first_seen[tag], tag),
+    )[:max_tags]
 
 
 def metadata_field(metadata: dict[str, Any], field: str) -> Any:
