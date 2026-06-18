@@ -30,6 +30,7 @@ def load_crs_baseline(
     gemini_max_tracks_per_artist=3,
     gemini_tag_candidate_topk=50,
     gemini_tag_candidate_weight=0.75,
+    gemini_artist_agreement_threshold=3,
 ):
     return CRS_BASELINE(
         lm_type=lm_type,
@@ -60,4 +61,5 @@ def load_crs_baseline(
         gemini_max_tracks_per_artist=gemini_max_tracks_per_artist,
         gemini_tag_candidate_topk=gemini_tag_candidate_topk,
         gemini_tag_candidate_weight=gemini_tag_candidate_weight,
+        gemini_artist_agreement_threshold=gemini_artist_agreement_threshold,
     )

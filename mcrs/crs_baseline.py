@@ -62,6 +62,7 @@ class CRS_BASELINE:
         gemini_max_tracks_per_artist: int = 3,
         gemini_tag_candidate_topk: int = 50,
         gemini_tag_candidate_weight: float = 0.75,
+        gemini_artist_agreement_threshold: int = 3,
     ):
         """Initialize the CRS baseline components.
 
@@ -104,6 +105,7 @@ class CRS_BASELINE:
         self.gemini_max_tracks_per_artist = gemini_max_tracks_per_artist
         self.gemini_tag_candidate_topk = gemini_tag_candidate_topk
         self.gemini_tag_candidate_weight = gemini_tag_candidate_weight
+        self.gemini_artist_agreement_threshold = gemini_artist_agreement_threshold
         valid_gemini_modes = {"tag_query", "multi_query_fusion"}
         if self.gemini_expansion_mode not in valid_gemini_modes:
             raise ValueError(
@@ -115,6 +117,7 @@ class CRS_BASELINE:
             "max_similarity",
             "max_similarity_tag_rerank",
             "tag_candidate_rerank",
+            "adaptive_artist_or_tags",
         }
         if self.gemini_fusion_method not in valid_fusion_methods:
             raise ValueError(
@@ -469,6 +472,75 @@ class CRS_BASELINE:
 
         return caps
 
+    def _gemini_artist_counts(self, gemini_tracks: List[Dict[str, Any]]) -> Dict[str, int]:
+        artist_counts = defaultdict(int)
+        for track in gemini_tracks:
+            artists = track.get("artist_name", "")
+            if isinstance(artists, list):
+                artist = ", ".join(str(item) for item in artists)
+            else:
+                artist = str(artists)
+            artist_key = artist.strip().lower()
+            if artist_key:
+                artist_counts[artist_key] += 1
+        return artist_counts
+
+    def _has_dominant_gemini_artist(self, gemini_tracks: List[Dict[str, Any]]) -> bool:
+        artist_counts = self._gemini_artist_counts(gemini_tracks)
+        if not artist_counts:
+            return False
+        return max(artist_counts.values()) >= self.gemini_artist_agreement_threshold
+
+    def _combined_gemini_tags(self, gemini_tracks: List[Dict[str, Any]]) -> List[str]:
+        tags = []
+        seen = set()
+        for track in gemini_tracks:
+            for tag in normalized_music_tags(track.get("tag_list"), max_tags=20):
+                if tag not in seen:
+                    seen.add(tag)
+                    tags.append(tag)
+        return tags
+
+    def _style_tag_retrieval(
+        self,
+        gemini_tracks: List[Dict[str, Any]],
+        topk: int,
+    ) -> List[str]:
+        """Retrieve by style tags only, ignoring Gemini track/artist/album names."""
+        reference_tags = self._combined_gemini_tags(gemini_tracks)
+        if not reference_tags:
+            return []
+
+        tag_to_tracks = self._build_tag_candidate_cache()
+        candidate_track_ids = set()
+        for tag in reference_tags:
+            for track_id, _ in tag_to_tracks.get(tag, []):
+                candidate_track_ids.add(track_id)
+
+        # If exact normalized tags produce too few candidates, compare against all tracks.
+        metadata_dict = getattr(self.retrieval, "metadata_dict", {})
+        if len(candidate_track_ids) < self.gemini_tag_candidate_topk:
+            candidate_track_ids = set(metadata_dict)
+
+        scored_candidates = []
+        for track_id in candidate_track_ids:
+            metadata = self._catalog_metadata(track_id)
+            catalog_tags = normalized_music_tags(metadata.get("tag_list"), max_tags=80)
+            tag_score = self._semantic_idf_tag_similarity(reference_tags, catalog_tags)
+            if tag_score <= 0:
+                continue
+            specificity_score = self._track_tag_specificity_score(track_id)
+            scored_candidates.append((track_id, tag_score, specificity_score))
+
+        ranked_track_ids = [
+            track_id
+            for track_id, _, _ in sorted(
+                scored_candidates,
+                key=lambda item: (-item[1], -item[2], item[0]),
+            )
+        ]
+        return self._select_with_artist_diversity(ranked_track_ids, topk=topk)
+
     def _max_similarity_tag_rerank_fusion(
         self,
         ranked_lists: List[List[Any]],
@@ -625,6 +697,11 @@ class CRS_BASELINE:
                 self.retrieval.text_to_item_retrieval(query, topk=self.gemini_topk_per_reference)
                 for query in query_texts
             ]
+
+        if self.gemini_fusion_method == "adaptive_artist_or_tags":
+            if self._has_dominant_gemini_artist(gemini_tracks):
+                return self._max_similarity_fusion(ranked_lists, topk=topk)
+            return self._style_tag_retrieval(gemini_tracks, topk=topk)
 
         if self.gemini_fusion_method == "tag_candidate_rerank":
             tag_ranked_lists = self._tag_candidate_lists(gemini_tracks)

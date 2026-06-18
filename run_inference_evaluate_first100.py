@@ -138,6 +138,7 @@ def load_model(
         gemini_max_tracks_per_artist=config.get("gemini_max_tracks_per_artist", 3),
         gemini_tag_candidate_topk=config.get("gemini_tag_candidate_topk", 50),
         gemini_tag_candidate_weight=config.get("gemini_tag_candidate_weight", 0.75),
+        gemini_artist_agreement_threshold=config.get("gemini_artist_agreement_threshold", 3),
     )
 
 
