@@ -24,6 +24,12 @@ def load_crs_baseline(
     gemini_reference_weight=1.0,
     gemini_max_reference_tracks=None,
     gemini_fusion_method="rrf",
+    gemini_tag_rerank_weight=0.15,
+    gemini_popularity_weight=0.02,
+    gemini_artist_penalty=0.05,
+    gemini_max_tracks_per_artist=3,
+    gemini_tag_candidate_topk=50,
+    gemini_tag_candidate_weight=0.75,
 ):
     return CRS_BASELINE(
         lm_type=lm_type,
@@ -48,4 +54,10 @@ def load_crs_baseline(
         gemini_reference_weight=gemini_reference_weight,
         gemini_max_reference_tracks=gemini_max_reference_tracks,
         gemini_fusion_method=gemini_fusion_method,
+        gemini_tag_rerank_weight=gemini_tag_rerank_weight,
+        gemini_popularity_weight=gemini_popularity_weight,
+        gemini_artist_penalty=gemini_artist_penalty,
+        gemini_max_tracks_per_artist=gemini_max_tracks_per_artist,
+        gemini_tag_candidate_topk=gemini_tag_candidate_topk,
+        gemini_tag_candidate_weight=gemini_tag_candidate_weight,
     )

@@ -55,6 +55,12 @@ class CRS_BASELINE:
         gemini_reference_weight: float = 1.0,
         gemini_max_reference_tracks: Optional[int] = None,
         gemini_fusion_method: str = "rrf",
+        gemini_tag_rerank_weight: float = 0.15,
+        gemini_popularity_weight: float = 0.02,
+        gemini_artist_penalty: float = 0.05,
+        gemini_max_tracks_per_artist: int = 3,
+        gemini_tag_candidate_topk: int = 50,
+        gemini_tag_candidate_weight: float = 0.75,
     ):
         """Initialize the CRS baseline components.
 
@@ -91,13 +97,24 @@ class CRS_BASELINE:
         self.gemini_reference_weight = gemini_reference_weight
         self.gemini_max_reference_tracks = gemini_max_reference_tracks
         self.gemini_fusion_method = gemini_fusion_method
+        self.gemini_tag_rerank_weight = gemini_tag_rerank_weight
+        self.gemini_popularity_weight = gemini_popularity_weight
+        self.gemini_artist_penalty = gemini_artist_penalty
+        self.gemini_max_tracks_per_artist = gemini_max_tracks_per_artist
+        self.gemini_tag_candidate_topk = gemini_tag_candidate_topk
+        self.gemini_tag_candidate_weight = gemini_tag_candidate_weight
         valid_gemini_modes = {"tag_query", "multi_query_fusion"}
         if self.gemini_expansion_mode not in valid_gemini_modes:
             raise ValueError(
                 f"Unknown gemini_expansion_mode='{self.gemini_expansion_mode}'. "
                 f"Expected one of {sorted(valid_gemini_modes)}."
             )
-        valid_fusion_methods = {"rrf", "max_similarity"}
+        valid_fusion_methods = {
+            "rrf",
+            "max_similarity",
+            "max_similarity_tag_rerank",
+            "tag_candidate_rerank",
+        }
         if self.gemini_fusion_method not in valid_fusion_methods:
             raise ValueError(
                 f"Unknown gemini_fusion_method='{self.gemini_fusion_method}'. "
@@ -125,6 +142,7 @@ class CRS_BASELINE:
         self.retrieval = load_retrieval_module(self.retrieval_type, self.item_db_name, self.track_split_types, self.corpus_types, self.cache_dir)
         self.item_db = MusicCatalogDB(self.item_db_name, self.track_split_types, self.corpus_types)
         self.user_db = UserProfileDB(self.user_db_name, self.user_split_types)
+        self._tag_candidate_cache = None
         self.prompts_dir = os.path.join(os.path.dirname(__file__), "system_prompts")
         self.role_prompt = {
             "role_play": open(f"{self.prompts_dir}/roleplay.txt", "r", encoding="utf-8").read(),
@@ -199,6 +217,284 @@ class CRS_BASELINE:
         )
         return ranked_track_ids[:topk]
 
+    def _controlled_tag_overlap_score(
+        self,
+        reference_track: Dict[str, Any],
+        catalog_track_id: str,
+    ) -> float:
+        """Score how much a catalog track's controlled tags match one Gemini reference."""
+        if not hasattr(self.retrieval, "metadata_dict"):
+            return 0.0
+
+        catalog_metadata = self.retrieval.metadata_dict.get(catalog_track_id)
+        if not catalog_metadata:
+            return 0.0
+
+        reference_tags = set(controlled_tags(reference_track.get("tag_list")))
+        catalog_tags = set(controlled_tags(catalog_metadata.get("tag_list")))
+        if not reference_tags or not catalog_tags:
+            return 0.0
+
+        return len(reference_tags & catalog_tags) / len(reference_tags | catalog_tags)
+
+    def _catalog_metadata(self, track_id: str) -> Dict[str, Any]:
+        """Return catalog metadata from the retrieval index when available."""
+        if hasattr(self.retrieval, "metadata_dict"):
+            return self.retrieval.metadata_dict.get(track_id, {})
+        try:
+            return self.item_db.id_to_metadata(track_id)
+        except Exception:
+            return {}
+
+    def _track_artist_key(self, track_id: str) -> str:
+        metadata = self._catalog_metadata(track_id)
+        artist = metadata.get("artist_name", "")
+        if isinstance(artist, list):
+            artist = ", ".join(str(item) for item in artist)
+        return str(artist).strip().lower()
+
+    def _track_popularity_score(self, track_id: str) -> float:
+        metadata = self._catalog_metadata(track_id)
+        try:
+            popularity = float(metadata.get("popularity", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            popularity = 0.0
+        return popularity / 100.0
+
+    def _build_tag_candidate_cache(self) -> Dict[str, list[tuple[str, float]]]:
+        """Build an inverted index from controlled tags to catalog tracks."""
+        if self._tag_candidate_cache is not None:
+            return self._tag_candidate_cache
+
+        tag_to_tracks = defaultdict(list)
+        metadata_dict = getattr(self.retrieval, "metadata_dict", {})
+        for track_id, metadata in metadata_dict.items():
+            tags = controlled_tags(metadata.get("tag_list"))
+            popularity = self._track_popularity_score(track_id)
+            for tag in tags:
+                tag_to_tracks[tag].append((track_id, popularity))
+
+        for tag, tracks in tag_to_tracks.items():
+            tracks.sort(key=lambda item: (-item[1], item[0]))
+
+        self._tag_candidate_cache = tag_to_tracks
+        return self._tag_candidate_cache
+
+    def _tag_candidate_lists(
+        self,
+        gemini_tracks: List[Dict[str, Any]],
+    ) -> List[List[tuple[str, float]]]:
+        """Generate extra candidate tracks from Gemini controlled tags."""
+        tag_to_tracks = self._build_tag_candidate_cache()
+        tag_ranked_lists = []
+
+        for reference_track in gemini_tracks:
+            reference_tags = set(controlled_tags(reference_track.get("tag_list")))
+            if not reference_tags:
+                tag_ranked_lists.append([])
+                continue
+
+            candidate_scores = {}
+            candidate_popularity = {}
+            for tag in reference_tags:
+                for track_id, popularity in tag_to_tracks.get(tag, []):
+                    candidate_scores[track_id] = candidate_scores.get(track_id, 0.0) + 1.0
+                    candidate_popularity[track_id] = max(
+                        popularity,
+                        candidate_popularity.get(track_id, 0.0),
+                    )
+
+            ranked = sorted(
+                candidate_scores,
+                key=lambda track_id: (
+                    -(candidate_scores[track_id] / len(reference_tags)),
+                    -candidate_popularity[track_id],
+                    track_id,
+                ),
+            )
+            tag_ranked_lists.append([
+                (track_id, candidate_scores[track_id] / len(reference_tags))
+                for track_id in ranked[: self.gemini_tag_candidate_topk]
+            ])
+
+        return tag_ranked_lists
+
+    def _select_with_artist_diversity(
+        self,
+        ranked_track_ids: List[str],
+        topk: int,
+        artist_caps: Optional[Dict[str, int]] = None,
+    ) -> List[str]:
+        """Prefer artist diversity while still backfilling to topk if needed."""
+        artist_caps = artist_caps or {}
+        default_cap = self.gemini_max_tracks_per_artist
+        if default_cap <= 0 and not artist_caps:
+            return ranked_track_ids[:topk]
+
+        selected = []
+        artist_counts = defaultdict(int)
+        skipped = []
+
+        for track_id in ranked_track_ids:
+            artist_key = self._track_artist_key(track_id)
+            artist_cap = artist_caps.get(artist_key, default_cap)
+            if artist_cap <= 0 or artist_counts[artist_key] < artist_cap:
+                selected.append(track_id)
+                artist_counts[artist_key] += 1
+            else:
+                skipped.append(track_id)
+            if len(selected) >= topk:
+                return selected
+
+        for track_id in skipped:
+            if track_id not in selected:
+                selected.append(track_id)
+            if len(selected) >= topk:
+                break
+
+        return selected[:topk]
+
+    def _adaptive_artist_caps(self, gemini_tracks: List[Dict[str, Any]]) -> Dict[str, int]:
+        """Allow more final tracks from artists repeatedly suggested by Gemini."""
+        artist_counts = defaultdict(int)
+        for track in gemini_tracks:
+            artists = track.get("artist_name", "")
+            if isinstance(artists, list):
+                artist = ", ".join(str(item) for item in artists)
+            else:
+                artist = str(artists)
+            artist_key = artist.strip().lower()
+            if artist_key:
+                artist_counts[artist_key] += 1
+
+        caps = {}
+        for artist_key, count in artist_counts.items():
+            if count >= 5:
+                caps[artist_key] = 14
+            elif count == 4:
+                caps[artist_key] = 10
+            elif count == 3:
+                caps[artist_key] = 7
+            elif count == 2:
+                caps[artist_key] = 5
+
+        return caps
+
+    def _max_similarity_tag_rerank_fusion(
+        self,
+        ranked_lists: List[List[Any]],
+        gemini_tracks: List[Dict[str, Any]],
+        topk: int,
+    ) -> List[str]:
+        """Fuse by embedding score, then add a controlled-tag overlap bonus."""
+        fused_scores = {}
+        embedding_scores = {}
+        tag_scores = {}
+        best_rank = {}
+
+        for list_idx, ranked_items in enumerate(ranked_lists):
+            reference_track = gemini_tracks[list_idx] if list_idx < len(gemini_tracks) else {}
+            for rank, item in enumerate(ranked_items, start=1):
+                if isinstance(item, tuple):
+                    track_id, embedding_score = item
+                else:
+                    track_id, embedding_score = item, 0.0
+
+                tag_score = self._controlled_tag_overlap_score(reference_track, track_id)
+                combined_score = embedding_score + (self.gemini_tag_rerank_weight * tag_score)
+
+                if track_id not in fused_scores or combined_score > fused_scores[track_id]:
+                    fused_scores[track_id] = combined_score
+                    embedding_scores[track_id] = embedding_score
+                    tag_scores[track_id] = tag_score
+
+                best_rank[track_id] = min(best_rank.get(track_id, rank), rank)
+
+        ranked_track_ids = sorted(
+            fused_scores,
+            key=lambda track_id: (
+                -fused_scores[track_id],
+                -embedding_scores[track_id],
+                -tag_scores[track_id],
+                best_rank[track_id],
+                track_id,
+            ),
+        )
+        return ranked_track_ids[:topk]
+
+    def _tag_candidate_rerank_fusion(
+        self,
+        embedding_ranked_lists: List[List[Any]],
+        tag_ranked_lists: List[List[Any]],
+        gemini_tracks: List[Dict[str, Any]],
+        topk: int,
+    ) -> List[str]:
+        """Combine embedding candidates, tag candidates, popularity, and artist diversity."""
+        fused_scores = defaultdict(float)
+        embedding_scores = defaultdict(float)
+        tag_scores = defaultdict(float)
+        popularity_scores = defaultdict(float)
+        best_rank = {}
+
+        for list_idx, ranked_items in enumerate(embedding_ranked_lists):
+            reference_track = gemini_tracks[list_idx] if list_idx < len(gemini_tracks) else {}
+            for rank, item in enumerate(ranked_items, start=1):
+                if isinstance(item, tuple):
+                    track_id, embedding_score = item
+                else:
+                    track_id, embedding_score = item, 0.0
+
+                tag_score = self._controlled_tag_overlap_score(reference_track, track_id)
+                popularity_score = self._track_popularity_score(track_id)
+                combined_score = (
+                    embedding_score
+                    + (self.gemini_tag_rerank_weight * tag_score)
+                    + (self.gemini_popularity_weight * popularity_score)
+                )
+
+                if combined_score > fused_scores[track_id]:
+                    fused_scores[track_id] = combined_score
+                embedding_scores[track_id] = max(embedding_scores[track_id], embedding_score)
+                tag_scores[track_id] = max(tag_scores[track_id], tag_score)
+                popularity_scores[track_id] = max(popularity_scores[track_id], popularity_score)
+                best_rank[track_id] = min(best_rank.get(track_id, rank), rank)
+
+        for ranked_items in tag_ranked_lists:
+            for rank, item in enumerate(ranked_items, start=1):
+                if isinstance(item, tuple):
+                    track_id, tag_candidate_score = item
+                else:
+                    track_id, tag_candidate_score = item, 0.0
+
+                popularity_score = self._track_popularity_score(track_id)
+                combined_score = (
+                    self.gemini_tag_candidate_weight * tag_candidate_score
+                    + self.gemini_popularity_weight * popularity_score
+                )
+
+                if combined_score > fused_scores[track_id]:
+                    fused_scores[track_id] = combined_score
+                tag_scores[track_id] = max(tag_scores[track_id], tag_candidate_score)
+                popularity_scores[track_id] = max(popularity_scores[track_id], popularity_score)
+                best_rank[track_id] = min(best_rank.get(track_id, 1000 + rank), 1000 + rank)
+
+        ranked_track_ids = sorted(
+            fused_scores,
+            key=lambda track_id: (
+                -fused_scores[track_id],
+                -embedding_scores[track_id],
+                -tag_scores[track_id],
+                -popularity_scores[track_id],
+                best_rank[track_id],
+                track_id,
+            ),
+        )
+        return self._select_with_artist_diversity(
+            ranked_track_ids,
+            topk=topk,
+            artist_caps=self._adaptive_artist_caps(gemini_tracks),
+        )
+
     def _gemini_multi_query_fusion_retrieval(
         self,
         conversation_text: str,
@@ -240,6 +536,22 @@ class CRS_BASELINE:
                 self.retrieval.text_to_item_retrieval(query, topk=self.gemini_topk_per_reference)
                 for query in query_texts
             ]
+
+        if self.gemini_fusion_method == "tag_candidate_rerank":
+            tag_ranked_lists = self._tag_candidate_lists(gemini_tracks)
+            return self._tag_candidate_rerank_fusion(
+                ranked_lists,
+                tag_ranked_lists,
+                gemini_tracks,
+                topk=topk,
+            )
+
+        if self.gemini_fusion_method == "max_similarity_tag_rerank":
+            return self._max_similarity_tag_rerank_fusion(
+                ranked_lists,
+                gemini_tracks,
+                topk=topk,
+            )
 
         if self.gemini_fusion_method == "max_similarity":
             return self._max_similarity_fusion(ranked_lists, topk=topk)

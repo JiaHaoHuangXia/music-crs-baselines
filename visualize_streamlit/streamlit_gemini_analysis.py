@@ -1743,7 +1743,7 @@ def render_embedding_map(df, conversation_details):
 
     fig = go.Figure()
     fig.add_trace(
-        go.Scattergl(
+        go.Scatter(
             x=visible_catalog[x_coord],
             y=visible_catalog[y_coord],
             mode="markers",
@@ -1758,23 +1758,6 @@ def render_embedding_map(df, conversation_details):
             ),
         )
     )
-
-    if not turn_ground_truth.empty:
-        fig.add_trace(
-            go.Scatter(
-                x=turn_ground_truth[x_coord],
-                y=turn_ground_truth[y_coord],
-                mode="markers",
-                name="Ground-truth track",
-                marker=dict(size=18, color="#2364aa", symbol="star", line=dict(width=1, color="#ffffff")),
-                text=turn_ground_truth["track_name"] + " - " + turn_ground_truth["artist_name"],
-                customdata=turn_ground_truth[["album_name"]],
-                hovertemplate=(
-                    "<b>%{text}</b><br>"
-                    "Album: %{customdata[0]}<extra></extra>"
-                ),
-            )
-        )
 
     if not final_recommendations_df.empty:
         fig.add_trace(
@@ -1857,6 +1840,23 @@ def render_embedding_map(df, conversation_details):
                     "<b>Gemini reference %{text}</b><br>"
                     "%{customdata[0]} - %{customdata[1]}<br>"
                     "Album: %{customdata[2]}<extra></extra>"
+                ),
+            )
+        )
+
+    if not turn_ground_truth.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=turn_ground_truth[x_coord],
+                y=turn_ground_truth[y_coord],
+                mode="markers",
+                name="Ground-truth track",
+                marker=dict(size=20, color="#2364aa", symbol="star", line=dict(width=2, color="#ffffff")),
+                text=turn_ground_truth["track_name"] + " - " + turn_ground_truth["artist_name"],
+                customdata=turn_ground_truth[["album_name"]],
+                hovertemplate=(
+                    "<b>%{text}</b><br>"
+                    "Album: %{customdata[0]}<extra></extra>"
                 ),
             )
         )
