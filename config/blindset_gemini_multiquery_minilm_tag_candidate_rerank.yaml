@@ -29,7 +29,7 @@ gemini_topk_per_reference: 100
 gemini_tag_candidate_topk: 100
 gemini_tag_candidate_weight: 0.75
 gemini_tag_rerank_weight: 0.20
-gemini_popularity_weight: 0.03
+gemini_popularity_weight: 0.0
 gemini_max_tracks_per_artist: 3
 gemini_rrf_k: 60
 include_original_query_in_fusion: false

@@ -1,4 +1,5 @@
 import os
+import math
 import torch
 from collections import defaultdict
 from typing import Optional, Any, List, Dict
@@ -6,7 +7,7 @@ from mcrs.db_item import MusicCatalogDB
 from mcrs.db_user import UserProfileDB
 from mcrs.lm_modules import load_lm_module
 from mcrs.retrieval_modules import load_retrieval_module
-from mcrs.controlled_tags import controlled_tags
+from mcrs.controlled_tags import controlled_tags, normalized_music_tags
 
 from mcrs.query_expansion.gemini_expander import GeminiExpander
 
@@ -143,6 +144,9 @@ class CRS_BASELINE:
         self.item_db = MusicCatalogDB(self.item_db_name, self.track_split_types, self.corpus_types)
         self.user_db = UserProfileDB(self.user_db_name, self.user_split_types)
         self._tag_candidate_cache = None
+        self._tag_idf_cache = None
+        self._tag_embedding_cache = {}
+        self._track_tag_specificity_cache = {}
         self.prompts_dir = os.path.join(os.path.dirname(__file__), "system_prompts")
         self.role_prompt = {
             "role_play": open(f"{self.prompts_dir}/roleplay.txt", "r", encoding="utf-8").read(),
@@ -217,12 +221,81 @@ class CRS_BASELINE:
         )
         return ranked_track_ids[:topk]
 
+    def _tag_idf(self) -> tuple[Dict[str, float], float]:
+        """Compute IDF weights for normalized catalog tags."""
+        if self._tag_idf_cache is not None:
+            return self._tag_idf_cache
+
+        metadata_dict = getattr(self.retrieval, "metadata_dict", {})
+        document_count = max(len(metadata_dict), 1)
+        document_frequency = defaultdict(int)
+
+        for metadata in metadata_dict.values():
+            for tag in set(normalized_music_tags(metadata.get("tag_list"), max_tags=80)):
+                document_frequency[tag] += 1
+
+        idf = {
+            tag: math.log((1 + document_count) / (1 + frequency)) + 1
+            for tag, frequency in document_frequency.items()
+        }
+        default_idf = sum(idf.values()) / len(idf) if idf else 1.0
+        self._tag_idf_cache = (idf, default_idf)
+        return self._tag_idf_cache
+
+    def _tag_embeddings(self, tags: List[str]) -> Dict[str, torch.Tensor]:
+        """Return cached normalized embeddings for individual tags."""
+        missing_tags = [tag for tag in tags if tag not in self._tag_embedding_cache]
+        if missing_tags and hasattr(self.retrieval, "_embed_texts"):
+            embeddings = self.retrieval._embed_texts(missing_tags)
+            for tag, embedding in zip(missing_tags, embeddings):
+                self._tag_embedding_cache[tag] = embedding
+
+        return {
+            tag: self._tag_embedding_cache[tag]
+            for tag in tags
+            if tag in self._tag_embedding_cache
+        }
+
+    def _semantic_idf_tag_similarity(self, reference_tags: List[str], catalog_tags: List[str]) -> float:
+        """Compare tag lists with normalization, semantic similarity, and IDF weights."""
+        if not reference_tags or not catalog_tags:
+            return 0.0
+
+        catalog_tag_set = set(catalog_tags)
+        idf, default_idf = self._tag_idf()
+        reference_embeddings = self._tag_embeddings(reference_tags)
+        catalog_embeddings = self._tag_embeddings(catalog_tags)
+
+        weighted_score = 0.0
+        total_weight = 0.0
+        for reference_tag in reference_tags:
+            weight = idf.get(reference_tag, default_idf)
+            total_weight += weight
+
+            if reference_tag in catalog_tag_set:
+                best_score = 1.0
+            elif reference_tag in reference_embeddings and catalog_embeddings:
+                reference_embedding = reference_embeddings[reference_tag]
+                best_score = max(
+                    float(torch.dot(reference_embedding, catalog_embedding))
+                    for catalog_embedding in catalog_embeddings.values()
+                )
+                best_score = max(0.0, min(best_score, 1.0))
+            else:
+                best_score = 0.0
+
+            weighted_score += weight * best_score
+
+        if total_weight == 0:
+            return 0.0
+        return weighted_score / total_weight
+
     def _controlled_tag_overlap_score(
         self,
         reference_track: Dict[str, Any],
         catalog_track_id: str,
     ) -> float:
-        """Score how much a catalog track's controlled tags match one Gemini reference."""
+        """Score how much a catalog track's tags match one Gemini reference."""
         if not hasattr(self.retrieval, "metadata_dict"):
             return 0.0
 
@@ -230,12 +303,9 @@ class CRS_BASELINE:
         if not catalog_metadata:
             return 0.0
 
-        reference_tags = set(controlled_tags(reference_track.get("tag_list")))
-        catalog_tags = set(controlled_tags(catalog_metadata.get("tag_list")))
-        if not reference_tags or not catalog_tags:
-            return 0.0
-
-        return len(reference_tags & catalog_tags) / len(reference_tags | catalog_tags)
+        reference_tags = normalized_music_tags(reference_track.get("tag_list"), max_tags=20)
+        catalog_tags = normalized_music_tags(catalog_metadata.get("tag_list"), max_tags=80)
+        return self._semantic_idf_tag_similarity(reference_tags, catalog_tags)
 
     def _catalog_metadata(self, track_id: str) -> Dict[str, Any]:
         """Return catalog metadata from the retrieval index when available."""
@@ -261,18 +331,34 @@ class CRS_BASELINE:
             popularity = 0.0
         return popularity / 100.0
 
+    def _track_tag_specificity_score(self, track_id: str) -> float:
+        """Average IDF of a track's normalized tags."""
+        if track_id in self._track_tag_specificity_cache:
+            return self._track_tag_specificity_cache[track_id]
+
+        metadata = self._catalog_metadata(track_id)
+        tags = normalized_music_tags(metadata.get("tag_list"), max_tags=80)
+        if not tags:
+            self._track_tag_specificity_cache[track_id] = 0.0
+            return 0.0
+
+        idf, default_idf = self._tag_idf()
+        score = sum(idf.get(tag, default_idf) for tag in tags) / len(tags)
+        self._track_tag_specificity_cache[track_id] = score
+        return score
+
     def _build_tag_candidate_cache(self) -> Dict[str, list[tuple[str, float]]]:
-        """Build an inverted index from controlled tags to catalog tracks."""
+        """Build an inverted index from normalized tags to catalog tracks."""
         if self._tag_candidate_cache is not None:
             return self._tag_candidate_cache
 
         tag_to_tracks = defaultdict(list)
         metadata_dict = getattr(self.retrieval, "metadata_dict", {})
         for track_id, metadata in metadata_dict.items():
-            tags = controlled_tags(metadata.get("tag_list"))
-            popularity = self._track_popularity_score(track_id)
+            tags = normalized_music_tags(metadata.get("tag_list"), max_tags=80)
+            specificity = self._track_tag_specificity_score(track_id)
             for tag in tags:
-                tag_to_tracks[tag].append((track_id, popularity))
+                tag_to_tracks[tag].append((track_id, specificity))
 
         for tag, tracks in tag_to_tracks.items():
             tracks.sort(key=lambda item: (-item[1], item[0]))
@@ -287,33 +373,36 @@ class CRS_BASELINE:
         """Generate extra candidate tracks from Gemini controlled tags."""
         tag_to_tracks = self._build_tag_candidate_cache()
         tag_ranked_lists = []
+        idf, default_idf = self._tag_idf()
 
         for reference_track in gemini_tracks:
-            reference_tags = set(controlled_tags(reference_track.get("tag_list")))
+            reference_tags = set(normalized_music_tags(reference_track.get("tag_list"), max_tags=20))
             if not reference_tags:
                 tag_ranked_lists.append([])
                 continue
 
             candidate_scores = {}
-            candidate_popularity = {}
+            candidate_specificity = {}
+            total_reference_weight = sum(idf.get(tag, default_idf) for tag in reference_tags)
             for tag in reference_tags:
-                for track_id, popularity in tag_to_tracks.get(tag, []):
-                    candidate_scores[track_id] = candidate_scores.get(track_id, 0.0) + 1.0
-                    candidate_popularity[track_id] = max(
-                        popularity,
-                        candidate_popularity.get(track_id, 0.0),
+                tag_weight = idf.get(tag, default_idf)
+                for track_id, specificity in tag_to_tracks.get(tag, []):
+                    candidate_scores[track_id] = candidate_scores.get(track_id, 0.0) + tag_weight
+                    candidate_specificity[track_id] = max(
+                        specificity,
+                        candidate_specificity.get(track_id, 0.0),
                     )
 
             ranked = sorted(
                 candidate_scores,
                 key=lambda track_id: (
-                    -(candidate_scores[track_id] / len(reference_tags)),
-                    -candidate_popularity[track_id],
+                    -(candidate_scores[track_id] / max(total_reference_weight, 1e-9)),
+                    -candidate_specificity[track_id],
                     track_id,
                 ),
             )
             tag_ranked_lists.append([
-                (track_id, candidate_scores[track_id] / len(reference_tags))
+                (track_id, candidate_scores[track_id] / max(total_reference_weight, 1e-9))
                 for track_id in ranked[: self.gemini_tag_candidate_topk]
             ])
 
