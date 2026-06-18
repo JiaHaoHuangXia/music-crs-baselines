@@ -148,7 +148,6 @@ class CRS_BASELINE:
         self.user_db = UserProfileDB(self.user_db_name, self.user_split_types)
         self._tag_candidate_cache = None
         self._tag_idf_cache = None
-        self._tag_embedding_cache = {}
         self._track_tag_specificity_cache = {}
         self.prompts_dir = os.path.join(os.path.dirname(__file__), "system_prompts")
         self.role_prompt = {
@@ -245,49 +244,21 @@ class CRS_BASELINE:
         self._tag_idf_cache = (idf, default_idf)
         return self._tag_idf_cache
 
-    def _tag_embeddings(self, tags: List[str]) -> Dict[str, torch.Tensor]:
-        """Return cached normalized embeddings for individual tags."""
-        missing_tags = [tag for tag in tags if tag not in self._tag_embedding_cache]
-        if missing_tags and hasattr(self.retrieval, "_embed_texts"):
-            embeddings = self.retrieval._embed_texts(missing_tags)
-            for tag, embedding in zip(missing_tags, embeddings):
-                self._tag_embedding_cache[tag] = embedding
-
-        return {
-            tag: self._tag_embedding_cache[tag]
-            for tag in tags
-            if tag in self._tag_embedding_cache
-        }
-
-    def _semantic_idf_tag_similarity(self, reference_tags: List[str], catalog_tags: List[str]) -> float:
-        """Compare tag lists with normalization, semantic similarity, and IDF weights."""
+    def _normalized_idf_tag_overlap(self, reference_tags: List[str], catalog_tags: List[str]) -> float:
+        """Compare normalized tags with IDF-weighted exact overlap."""
         if not reference_tags or not catalog_tags:
             return 0.0
 
         catalog_tag_set = set(catalog_tags)
         idf, default_idf = self._tag_idf()
-        reference_embeddings = self._tag_embeddings(reference_tags)
-        catalog_embeddings = self._tag_embeddings(catalog_tags)
 
         weighted_score = 0.0
         total_weight = 0.0
         for reference_tag in reference_tags:
             weight = idf.get(reference_tag, default_idf)
             total_weight += weight
-
             if reference_tag in catalog_tag_set:
-                best_score = 1.0
-            elif reference_tag in reference_embeddings and catalog_embeddings:
-                reference_embedding = reference_embeddings[reference_tag]
-                best_score = max(
-                    float(torch.dot(reference_embedding, catalog_embedding))
-                    for catalog_embedding in catalog_embeddings.values()
-                )
-                best_score = max(0.0, min(best_score, 1.0))
-            else:
-                best_score = 0.0
-
-            weighted_score += weight * best_score
+                weighted_score += weight
 
         if total_weight == 0:
             return 0.0
@@ -308,7 +279,7 @@ class CRS_BASELINE:
 
         reference_tags = normalized_music_tags(reference_track.get("tag_list"), max_tags=20)
         catalog_tags = normalized_music_tags(catalog_metadata.get("tag_list"), max_tags=80)
-        return self._semantic_idf_tag_similarity(reference_tags, catalog_tags)
+        return self._normalized_idf_tag_overlap(reference_tags, catalog_tags)
 
     def _catalog_metadata(self, track_id: str) -> Dict[str, Any]:
         """Return catalog metadata from the retrieval index when available."""
@@ -517,16 +488,11 @@ class CRS_BASELINE:
             for track_id, _ in tag_to_tracks.get(tag, []):
                 candidate_track_ids.add(track_id)
 
-        # If exact normalized tags produce too few candidates, compare against all tracks.
-        metadata_dict = getattr(self.retrieval, "metadata_dict", {})
-        if len(candidate_track_ids) < self.gemini_tag_candidate_topk:
-            candidate_track_ids = set(metadata_dict)
-
         scored_candidates = []
         for track_id in candidate_track_ids:
             metadata = self._catalog_metadata(track_id)
             catalog_tags = normalized_music_tags(metadata.get("tag_list"), max_tags=80)
-            tag_score = self._semantic_idf_tag_similarity(reference_tags, catalog_tags)
+            tag_score = self._normalized_idf_tag_overlap(reference_tags, catalog_tags)
             if tag_score <= 0:
                 continue
             specificity_score = self._track_tag_specificity_score(track_id)
