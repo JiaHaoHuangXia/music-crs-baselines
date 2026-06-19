@@ -10,6 +10,7 @@ from datasets import concatenate_datasets, load_dataset
 from sentence_transformers import SentenceTransformer
 
 from mcrs.controlled_tags import metadata_field
+from mcrs.style_profiles import attach_artist_style_profiles
 
 
 class SENTENCE_TRANSFORMER_MODEL:
@@ -66,7 +67,8 @@ class SENTENCE_TRANSFORMER_MODEL:
         metadata_concat_dataset = concatenate_datasets(
             [metadata_dataset[split_type] for split_type in self.split_types]
         )
-        return {item["track_id"]: item for item in metadata_concat_dataset}
+        metadata_dict = {item["track_id"]: item for item in metadata_concat_dataset}
+        return attach_artist_style_profiles(metadata_dict)
 
     def _stringify_metadata(self, metadata: Dict[str, object]) -> str:
         parts = []

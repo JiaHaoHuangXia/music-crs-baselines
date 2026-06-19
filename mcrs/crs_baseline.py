@@ -170,6 +170,7 @@ class CRS_BASELINE:
             "album_name": clean_join(track.get("album_name")),
             "tag_list": clean_join(track.get("tag_list")),
             "controlled_tag_list": clean_join(controlled_tags(track.get("tag_list"))),
+            "artist_style_profile": clean_join(normalized_music_tags(track.get("tag_list"), max_tags=8)),
             "release_date": clean_join(track.get("release_date")),
         }
         return "\n".join(f"{field}: {values.get(field, '')}" for field in self.corpus_types)

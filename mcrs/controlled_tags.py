@@ -170,4 +170,6 @@ def controlled_tags(value: Any, max_tags: int = 8, whitelist_path: str | None = 
 def metadata_field(metadata: dict[str, Any], field: str) -> Any:
     if field == "controlled_tag_list":
         return controlled_tags(metadata.get("tag_list"))
+    if field == "artist_style_profile":
+        return metadata.get("artist_style_profile", [])
     return metadata[field]

@@ -10,6 +10,7 @@ import bm25s
 from datasets import load_dataset, concatenate_datasets
 
 from mcrs.controlled_tags import metadata_field
+from mcrs.style_profiles import attach_artist_style_profiles
 
 
 class BM25_MODEL:
@@ -60,7 +61,7 @@ class BM25_MODEL:
         metadata_dataset = load_dataset(self.dataset_name)
         metadata_concat_dataset = concatenate_datasets([metadata_dataset[split_type] for split_type in self.split_types])
         metadata_dict = {item["track_id"]: item for item in metadata_concat_dataset}
-        return metadata_dict
+        return attach_artist_style_profiles(metadata_dict)
 
     def _stringify_metadata(self, metadata: dict[str, object]) -> str:
         """Convert a metadata dict into a multi-line string for indexing.
