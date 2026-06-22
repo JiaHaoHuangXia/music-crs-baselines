@@ -24,6 +24,13 @@ from datasets import concatenate_datasets, load_dataset
 from sentence_transformers import SentenceTransformer
 from transformers import AutoModel, AutoTokenizer
 
+from mcrs.style_profiles import (
+    attach_artist_style_profiles,
+    corpus_cache_name,
+    release_decade_text,
+    weighted_metadata_lines,
+)
+
 
 DATASET_NAME = "talkpl-ai/TalkPlayData-Challenge-Track-Metadata"
 SPLIT_TYPES = ["all_tracks"]
@@ -54,8 +61,10 @@ def pseudo_track_to_text(track: dict[str, Any], corpus_types: list[str]) -> str:
         "album_name": ", ".join(clean_list_field(track.get("album_name"))),
         "tag_list": ", ".join(clean_list_field(track.get("tag_list"))),
         "release_date": str(track.get("release_date", "")).strip(),
+        "artist_style_profile": clean_list_field(track.get("tag_list"))[:8],
+        "release_decade": release_decade_text(track.get("release_date")),
     }
-    return "\n".join(f"{field}: {values.get(field, '')}" for field in corpus_types)
+    return "\n".join(weighted_metadata_lines(values, corpus_types))
 
 
 def load_gemini_cache_file(path: Path) -> list[dict[str, Any]]:
@@ -149,7 +158,7 @@ def embed_texts_sentence_transformer(
 
 
 def get_index_dir(cache_dir: Path, retrieval_type: str, corpus_types: list[str]) -> Path:
-    corpus_name = "_".join(corpus_types)
+    corpus_name = corpus_cache_name(corpus_types)
     if retrieval_type == "bert":
         return cache_dir / "bert" / corpus_name
     if retrieval_type == "sentence_transformer":
@@ -193,7 +202,7 @@ def embed_reference_texts(
 def load_catalog_metadata() -> dict[str, dict[str, Any]]:
     dataset = load_dataset(DATASET_NAME)
     full_dataset = concatenate_datasets([dataset[split] for split in SPLIT_TYPES])
-    return {item["track_id"]: item for item in full_dataset}
+    return attach_artist_style_profiles({item["track_id"]: item for item in full_dataset})
 
 
 def assign_broad_genre(tag_text: str) -> str:
