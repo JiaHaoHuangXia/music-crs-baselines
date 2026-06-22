@@ -275,6 +275,9 @@ class CRS_BASELINE:
         user_profile = data.get("user_profile")
         if user_profile:
             context_parts.append(f"user_profile: {user_profile}")
+        turn_number = data.get("turn_number")
+        if turn_number is not None:
+            context_parts.append(f"turn_number: {turn_number}")
         return "\n".join(context_parts)
 
     def chat(self, user_query: str, user_id: Optional[str] = None) -> dict[str, Any]:

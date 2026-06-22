@@ -8,6 +8,7 @@ fuse that signal with catalog metadata retrieval.
 
 import json
 import os
+import re
 from collections import defaultdict
 from typing import Any, Dict, Iterable, List
 
@@ -56,6 +57,7 @@ class CONVERSATION_HYBRID_MODEL:
         )
 
         self.metadata_dict = self._load_metadata()
+        self._build_catalog_indexes()
         self.bm25_metadata = BM25_MODEL(dataset_name, split_types, corpus_types, cache_dir)
         self.semantic_metadata = self._load_semantic_metadata()
 
@@ -71,6 +73,87 @@ class CONVERSATION_HYBRID_MODEL:
             [metadata_dataset[split_type] for split_type in self.split_types]
         )
         return {item["track_id"]: item for item in metadata_concat_dataset}
+
+    def _normalize(self, text: Any) -> str:
+        text = self._clean_join(text).lower()
+        text = re.sub(r"\([^)]*(anniversary|deluxe|remaster|expanded|edition|live)[^)]*\)", " ", text)
+        text = re.sub(r"\b(remaster(?:ed)?|deluxe|expanded|anniversary|edition|explicit|clean|mono|stereo)\b", " ", text)
+        text = re.sub(r"[^a-z0-9]+", " ", text)
+        return re.sub(r"\s+", " ", text).strip()
+
+    def _tokenize_text(self, text: Any) -> set[str]:
+        stopwords = {
+            "the", "a", "an", "and", "or", "to", "for", "of", "in", "on", "with",
+            "me", "my", "i", "want", "need", "song", "track", "music", "something",
+            "recommend", "recommendation", "please", "like", "more", "another",
+        }
+        return {
+            token
+            for token in self._normalize(text).split()
+            if len(token) > 2 and token not in stopwords
+        }
+
+    def _build_catalog_indexes(self) -> None:
+        self.artist_to_tracks = defaultdict(list)
+        self.tag_to_tracks = defaultdict(list)
+        self.year_to_tracks = defaultdict(list)
+        self.decade_to_tracks = defaultdict(list)
+        self.version_groups = defaultdict(list)
+        self.token_to_tracks = defaultdict(list)
+        self.track_popularity = {}
+        self.track_tokens = {}
+
+        for track_id, metadata in self.metadata_dict.items():
+            popularity = float(metadata.get("popularity") or 0.0)
+            self.track_popularity[track_id] = popularity
+
+            title_norm = self._normalize(metadata.get("track_name"))
+            artists = metadata.get("artist_name") or []
+            if not isinstance(artists, list):
+                artists = [artists]
+            artist_norms = [self._normalize(artist) for artist in artists if self._normalize(artist)]
+            primary_artist = artist_norms[0] if artist_norms else ""
+            if title_norm and primary_artist:
+                self.version_groups[(title_norm, primary_artist)].append(track_id)
+            for artist_norm in artist_norms:
+                self.artist_to_tracks[artist_norm].append(track_id)
+
+            tags = metadata.get("tag_list") or []
+            if not isinstance(tags, list):
+                tags = [tags]
+            for tag in tags:
+                tag_norm = self._normalize(tag)
+                if tag_norm:
+                    self.tag_to_tracks[tag_norm].append(track_id)
+
+            release_date = str(metadata.get("release_date") or "")
+            match = re.search(r"(19|20)\d{2}", release_date)
+            if match:
+                year = match.group(0)
+                self.year_to_tracks[year].append(track_id)
+                self.decade_to_tracks[f"{year[:3]}0s"].append(track_id)
+
+            metadata_text = " ".join(
+                self._clean_join(metadata.get(field))
+                for field in ["track_name", "artist_name", "album_name", "tag_list", "release_date"]
+            )
+            self.track_tokens[track_id] = self._tokenize_text(metadata_text)
+            for token in self.track_tokens[track_id]:
+                self.token_to_tracks[token].append(track_id)
+
+        for index in [
+            self.artist_to_tracks,
+            self.tag_to_tracks,
+            self.year_to_tracks,
+            self.decade_to_tracks,
+            self.version_groups,
+            self.token_to_tracks,
+        ]:
+            for key, track_ids in index.items():
+                index[key] = sorted(
+                    dict.fromkeys(track_ids),
+                    key=lambda tid: (-self.track_popularity.get(tid, 0.0), tid),
+                )
 
     def _load_semantic_metadata(self):
         if not self.use_semantic_metadata:
@@ -123,6 +206,65 @@ class CONVERSATION_HYBRID_MODEL:
             for field in fields
             if self._clean_join(metadata.get(field))
         )
+
+    def _parse_query_state(self, query: str) -> Dict[str, Any]:
+        user_messages = re.findall(r"(?im)^user:\s*(.+)$", query)
+        current_user = user_messages[-1] if user_messages else query
+        all_user_text = " ".join(user_messages) if user_messages else query
+        lower_current = current_user.lower()
+
+        previous_track_ids = re.findall(r"track_id:\s*([0-9a-fA-F-]{36})", query)
+        turn_match = re.search(r"(?im)^turn_number:\s*(\d+)", query)
+        turn_number = int(turn_match.group(1)) if turn_match else None
+
+        positive_patterns = [
+            "more like", "similar", "same vibe", "that vibe", "i like", "i liked",
+            "love", "loved", "yes", "great", "good", "another one", "keep",
+        ]
+        negative_patterns = [
+            "not ", "don't", "dont", "avoid", "less", "too ", "no ", "different",
+            "instead", "change", "something else",
+        ]
+        change_artist_patterns = [
+            "different artist", "another artist", "new artist", "other artist",
+            "not the same artist",
+        ]
+
+        feedback = "neutral"
+        if any(pattern in lower_current for pattern in positive_patterns):
+            feedback = "positive"
+        if any(pattern in lower_current for pattern in negative_patterns):
+            feedback = "negative"
+        change_artist = any(pattern in lower_current for pattern in change_artist_patterns)
+
+        return {
+            "current_user": current_user,
+            "all_user_text": all_user_text,
+            "previous_track_ids": list(dict.fromkeys(previous_track_ids)),
+            "feedback": feedback,
+            "change_artist": change_artist,
+            "turn_number": turn_number,
+            "tokens": self._tokenize_text(all_user_text),
+        }
+
+    def _structured_query(self, query: str, state: Dict[str, Any]) -> str:
+        parts = [query, f"current_request: {state['current_user']}"]
+        parts.append(f"all_user_preferences: {state['all_user_text']}")
+
+        if state["previous_track_ids"]:
+            previous_metadata = [
+                self._metadata_to_text(track_id)
+                for track_id in state["previous_track_ids"][-3:]
+            ]
+            label = "liked_previous_tracks" if state["feedback"] == "positive" else "previous_tracks"
+            parts.append(f"{label}:\n" + "\n".join(previous_metadata))
+
+        if state["change_artist"]:
+            parts.append("constraint: use a different artist from previous recommendations")
+        if state["feedback"] == "negative":
+            parts.append("negative_feedback: avoid the immediately previous recommendation style")
+
+        return "\n".join(parts)
 
     def _ground_truth_for_turn(self, conversations: List[Dict[str, Any]], turn_number: int) -> str | None:
         for message in conversations:
@@ -202,6 +344,127 @@ class CONVERSATION_HYBRID_MODEL:
 
         return sorted(scores, key=lambda tid: (-scores[tid], best_rank[tid], tid))
 
+    def _catalog_signal_candidates(self, state: Dict[str, Any], limit: int = 160) -> List[str]:
+        scores = defaultdict(float)
+        query_norm = self._normalize(state["all_user_text"])
+        query_tokens = state["tokens"]
+
+        for artist_norm, track_ids in self.artist_to_tracks.items():
+            if artist_norm and artist_norm in query_norm:
+                for rank, track_id in enumerate(track_ids[:40], start=1):
+                    scores[track_id] += 4.0 / (rank ** 0.5)
+
+        for tag_norm, track_ids in self.tag_to_tracks.items():
+            tag_tokens = set(tag_norm.split())
+            if tag_norm in query_norm or (tag_tokens and tag_tokens.issubset(query_tokens)):
+                for rank, track_id in enumerate(track_ids[:30], start=1):
+                    scores[track_id] += 1.6 / (rank ** 0.5)
+
+        for decade in re.findall(r"\b(?:19|20)\d0s\b", query_norm):
+            for rank, track_id in enumerate(self.decade_to_tracks.get(decade, [])[:40], start=1):
+                scores[track_id] += 1.2 / (rank ** 0.5)
+        for year in re.findall(r"\b(?:19|20)\d{2}\b", query_norm):
+            for rank, track_id in enumerate(self.year_to_tracks.get(year, [])[:40], start=1):
+                scores[track_id] += 1.5 / (rank ** 0.5)
+
+        overlap_counts = defaultdict(int)
+        for token in query_tokens:
+            for track_id in self.token_to_tracks.get(token, [])[:300]:
+                overlap_counts[track_id] += 1
+        for track_id, overlap in overlap_counts.items():
+            if overlap >= 3:
+                scores[track_id] += overlap + min(self.track_popularity.get(track_id, 0.0), 100.0) / 200.0
+
+        return sorted(scores, key=lambda tid: (-scores[tid], -self.track_popularity.get(tid, 0.0), tid))[:limit]
+
+    def _feedback_candidates(self, state: Dict[str, Any], limit: int = 120) -> List[str]:
+        if not state["previous_track_ids"]:
+            return []
+
+        scores = defaultdict(float)
+        previous_ids = state["previous_track_ids"][-3:]
+        for recency, track_id in enumerate(reversed(previous_ids), start=1):
+            metadata = self.metadata_dict.get(track_id)
+            if not metadata:
+                continue
+
+            title_norm = self._normalize(metadata.get("track_name"))
+            artists = metadata.get("artist_name") or []
+            if not isinstance(artists, list):
+                artists = [artists]
+            artist_norms = [self._normalize(artist) for artist in artists if self._normalize(artist)]
+            primary_artist = artist_norms[0] if artist_norms else ""
+
+            if state["feedback"] != "negative":
+                if title_norm and primary_artist:
+                    for rank, sibling_id in enumerate(self.version_groups.get((title_norm, primary_artist), [])[:12], start=1):
+                        if sibling_id != track_id:
+                            scores[sibling_id] += 3.0 / (rank + recency)
+                if not state["change_artist"]:
+                    for artist_norm in artist_norms:
+                        for rank, sibling_id in enumerate(self.artist_to_tracks.get(artist_norm, [])[:50], start=1):
+                            if sibling_id != track_id:
+                                scores[sibling_id] += 1.4 / (rank ** 0.5 + recency)
+
+            tags = metadata.get("tag_list") or []
+            if not isinstance(tags, list):
+                tags = [tags]
+            tag_weight = 1.2 if state["feedback"] != "negative" else 0.5
+            for tag in tags[:8]:
+                tag_norm = self._normalize(tag)
+                for rank, sibling_id in enumerate(self.tag_to_tracks.get(tag_norm, [])[:35], start=1):
+                    if sibling_id != track_id:
+                        scores[sibling_id] += tag_weight / (rank ** 0.5 + recency)
+
+        return sorted(scores, key=lambda tid: (-scores[tid], -self.track_popularity.get(tid, 0.0), tid))[:limit]
+
+    def _excluded_tracks(self, state: Dict[str, Any]) -> set[str]:
+        excluded = set(state["previous_track_ids"])
+        if state["feedback"] == "negative" and state["previous_track_ids"]:
+            last_track = state["previous_track_ids"][-1]
+            metadata = self.metadata_dict.get(last_track)
+            if metadata:
+                artists = metadata.get("artist_name") or []
+                if not isinstance(artists, list):
+                    artists = [artists]
+                for artist in artists:
+                    artist_norm = self._normalize(artist)
+                    excluded.update(self.artist_to_tracks.get(artist_norm, [])[:80])
+        if state["change_artist"] and state["previous_track_ids"]:
+            for track_id in state["previous_track_ids"][-2:]:
+                metadata = self.metadata_dict.get(track_id)
+                if not metadata:
+                    continue
+                artists = metadata.get("artist_name") or []
+                if not isinstance(artists, list):
+                    artists = [artists]
+                for artist in artists:
+                    excluded.update(self.artist_to_tracks.get(self._normalize(artist), [])[:80])
+        return excluded
+
+    def _version_expand(self, ranked_track_ids: List[str], limit: int) -> List[str]:
+        expanded = []
+        seen = set()
+        for track_id in ranked_track_ids:
+            if track_id not in seen:
+                expanded.append(track_id)
+                seen.add(track_id)
+            metadata = self.metadata_dict.get(track_id)
+            if not metadata:
+                continue
+            title_norm = self._normalize(metadata.get("track_name"))
+            artists = metadata.get("artist_name") or []
+            if not isinstance(artists, list):
+                artists = [artists]
+            primary_artist = self._normalize(artists[0]) if artists else ""
+            for sibling_id in self.version_groups.get((title_norm, primary_artist), [])[:4]:
+                if sibling_id not in seen:
+                    expanded.append(sibling_id)
+                    seen.add(sibling_id)
+            if len(expanded) >= limit:
+                break
+        return expanded[:limit]
+
     def _rrf_add(
         self,
         fused_scores: Dict[str, float],
@@ -214,14 +477,24 @@ class CONVERSATION_HYBRID_MODEL:
             best_rank[track_id] = min(best_rank.get(track_id, rank), rank)
 
     def text_to_item_retrieval(self, query: str, topk: int) -> List[str]:
+        state = self._parse_query_state(query)
+        structured_query = self._structured_query(query, state)
+        turn_number = state.get("turn_number") or 1
+        conversation_weight = 2.4 if turn_number <= 2 else 3.2
+        feedback_weight = 2.0 if state["previous_track_ids"] else 0.0
+
         ranked_lists = [
-            (self._conversation_retrieval(query), 3.0),
-            (self.bm25_metadata.text_to_item_retrieval(query, self.metadata_topk), 0.7),
+            (self._conversation_retrieval(structured_query), conversation_weight),
+            (self.bm25_metadata.text_to_item_retrieval(structured_query, self.metadata_topk), 0.9),
+            (self._catalog_signal_candidates(state), 1.6),
         ]
+        feedback_candidates = self._feedback_candidates(state)
+        if feedback_candidates:
+            ranked_lists.append((feedback_candidates, feedback_weight))
         if self.semantic_metadata is not None:
             ranked_lists.append(
                 (
-                    self.semantic_metadata.text_to_item_retrieval(query, self.metadata_topk),
+                    self.semantic_metadata.text_to_item_retrieval(structured_query, self.metadata_topk),
                     1.5,
                 )
             )
@@ -235,7 +508,11 @@ class CONVERSATION_HYBRID_MODEL:
             fused_scores,
             key=lambda tid: (-fused_scores[tid], best_rank[tid], tid),
         )
-        return ranked_track_ids[:topk]
+        excluded = self._excluded_tracks(state)
+        filtered = [track_id for track_id in ranked_track_ids if track_id not in excluded]
+        if len(filtered) < topk:
+            filtered.extend(track_id for track_id in ranked_track_ids if track_id not in filtered)
+        return self._version_expand(filtered, topk)
 
     def batch_text_to_item_retrieval(self, queries: List[str], topk: int) -> List[List[str]]:
         return [self.text_to_item_retrieval(query, topk) for query in queries]
