@@ -100,6 +100,10 @@ def main(args):
         gemini_reference_weight=config.get("gemini_reference_weight", 1.0),
         gemini_max_reference_tracks=config.get("gemini_max_reference_tracks", None),
         gemini_fusion_method=config.get("gemini_fusion_method", "rrf"),
+        rerank_tag_weight=config.get("rerank_tag_weight", 0.04),
+        rerank_artist_profile_weight=config.get("rerank_artist_profile_weight", 0.04),
+        rerank_decade_weight=config.get("rerank_decade_weight", 0.02),
+        retrieval_only=config.get("retrieval_only", False),
     )
     db = load_dataset(config.test_dataset_name, split="test")
     # Prepare all batch data at once

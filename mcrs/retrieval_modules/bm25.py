@@ -9,6 +9,12 @@ import json
 import bm25s
 from datasets import load_dataset, concatenate_datasets
 
+from mcrs.style_profiles import (
+    attach_artist_style_profiles,
+    corpus_cache_name,
+    weighted_metadata_lines,
+)
+
 
 class BM25_MODEL:
     """BM25 retriever over track metadata.
@@ -30,7 +36,7 @@ class BM25_MODEL:
         self.dataset_name = dataset_name
         self.split_types = split_types
         self.corpus_types = corpus_types
-        self.corpus_name = "_".join(corpus_types)
+        self.corpus_name = corpus_cache_name(corpus_types)
         self.cache_dir = cache_dir
         self.metadata_dict = self._load_corpus()
         if os.path.exists(f"{self.cache_dir}/bm25/{self.corpus_name}"):
@@ -58,7 +64,7 @@ class BM25_MODEL:
         metadata_dataset = load_dataset(self.dataset_name)
         metadata_concat_dataset = concatenate_datasets([metadata_dataset[split_type] for split_type in self.split_types])
         metadata_dict = {item["track_id"]: item for item in metadata_concat_dataset}
-        return metadata_dict
+        return attach_artist_style_profiles(metadata_dict)
 
     def _stringify_metadata(self, metadata: dict[str, object]) -> str:
         """Convert a metadata dict into a multi-line string for indexing.
@@ -67,13 +73,7 @@ class BM25_MODEL:
         Returns:
             A newline-separated string with `field: value` per selected field.
         """
-        metadata_str = ""
-        for corpus_type in self.corpus_types:
-            entity = metadata[corpus_type]
-            if isinstance(entity, list):
-                entity = ", ".join(entity)
-            metadata_str += f"{corpus_type}: {entity}\n"
-        return metadata_str
+        return "\n".join(weighted_metadata_lines(metadata, self.corpus_types)) + "\n"
 
     def build_index(self) -> None:
         """Build and persist a BM25 index over the loaded corpus.

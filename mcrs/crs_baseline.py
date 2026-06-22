@@ -6,6 +6,8 @@ from mcrs.db_item import MusicCatalogDB
 from mcrs.db_user import UserProfileDB
 from mcrs.lm_modules import load_lm_module
 from mcrs.retrieval_modules import load_retrieval_module
+from mcrs.controlled_tags import normalized_music_tags
+from mcrs.style_profiles import release_decade_text, weighted_metadata_lines
 
 from mcrs.query_expansion.gemini_expander import GeminiExpander
 
@@ -54,6 +56,10 @@ class CRS_BASELINE:
         gemini_reference_weight: float = 1.0,
         gemini_max_reference_tracks: Optional[int] = None,
         gemini_fusion_method: str = "rrf",
+        rerank_tag_weight: float = 0.04,
+        rerank_artist_profile_weight: float = 0.04,
+        rerank_decade_weight: float = 0.02,
+        retrieval_only: bool = False,
     ):
         """Initialize the CRS baseline components.
 
@@ -79,6 +85,7 @@ class CRS_BASELINE:
         self.device = device
         self.dtype = dtype
         self.attn_implementation = attn_implementation
+        self.retrieval_only = retrieval_only
 
         # Gemini query expansion
         self.use_gemini_expansion = use_gemini_expansion
@@ -90,13 +97,16 @@ class CRS_BASELINE:
         self.gemini_reference_weight = gemini_reference_weight
         self.gemini_max_reference_tracks = gemini_max_reference_tracks
         self.gemini_fusion_method = gemini_fusion_method
+        self.rerank_tag_weight = rerank_tag_weight
+        self.rerank_artist_profile_weight = rerank_artist_profile_weight
+        self.rerank_decade_weight = rerank_decade_weight
         valid_gemini_modes = {"tag_query", "multi_query_fusion"}
         if self.gemini_expansion_mode not in valid_gemini_modes:
             raise ValueError(
                 f"Unknown gemini_expansion_mode='{self.gemini_expansion_mode}'. "
                 f"Expected one of {sorted(valid_gemini_modes)}."
             )
-        valid_fusion_methods = {"rrf", "max_similarity"}
+        valid_fusion_methods = {"rrf", "max_similarity", "max_similarity_structured_rerank"}
         if self.gemini_fusion_method not in valid_fusion_methods:
             raise ValueError(
                 f"Unknown gemini_fusion_method='{self.gemini_fusion_method}'. "
@@ -120,12 +130,12 @@ class CRS_BASELINE:
         else:
             self.gemini_expander = None
 
-        self.lm = load_lm_module(self.lm_type, self.device, self.attn_implementation, self.dtype)
+        self.lm = None if self.retrieval_only else load_lm_module(self.lm_type, self.device, self.attn_implementation, self.dtype)
         self.retrieval = load_retrieval_module(self.retrieval_type, self.item_db_name, self.track_split_types, self.corpus_types, self.cache_dir)
         self.item_db = MusicCatalogDB(self.item_db_name, self.track_split_types, self.corpus_types)
-        self.user_db = UserProfileDB(self.user_db_name, self.user_split_types)
+        self.user_db = None if self.retrieval_only else UserProfileDB(self.user_db_name, self.user_split_types)
         self.prompts_dir = os.path.join(os.path.dirname(__file__), "system_prompts")
-        self.role_prompt = {
+        self.role_prompt = {} if self.retrieval_only else {
             "role_play": open(f"{self.prompts_dir}/roleplay.txt", "r", encoding="utf-8").read(),
             "personalization": open(f"{self.prompts_dir}/personalization.txt", "r", encoding="utf-8").read(),
             "response_generation": open(f"{self.prompts_dir}/response_generation.txt", "r", encoding="utf-8").read(),
@@ -139,13 +149,16 @@ class CRS_BASELINE:
                 return ", ".join(str(item).strip() for item in value if str(item).strip())
             return str(value).strip() if value is not None else ""
 
-        return (
-            f"track_name: {clean_join(track.get('track_name'))}\n"
-            f"artist_name: {clean_join(track.get('artist_name'))}\n"
-            f"album_name: {clean_join(track.get('album_name'))}\n"
-            f"tag_list: {clean_join(track.get('tag_list'))}\n"
-            f"release_date: {clean_join(track.get('release_date'))}"
-        )
+        values = {
+            "track_name": clean_join(track.get("track_name")),
+            "artist_name": clean_join(track.get("artist_name")),
+            "album_name": clean_join(track.get("album_name")),
+            "tag_list": clean_join(track.get("tag_list")),
+            "artist_style_profile": normalized_music_tags(track.get("tag_list"), max_tags=8),
+            "release_date": clean_join(track.get("release_date")),
+            "release_decade": release_decade_text(track.get("release_date")),
+        }
+        return "\n".join(weighted_metadata_lines(values, self.corpus_types))
 
     def _reciprocal_rank_fusion(
         self,
@@ -196,6 +209,77 @@ class CRS_BASELINE:
         )
         return ranked_track_ids[:topk]
 
+    def _metadata_for_track(self, track_id: str) -> dict[str, Any]:
+        if hasattr(self.retrieval, "metadata_dict") and track_id in self.retrieval.metadata_dict:
+            return self.retrieval.metadata_dict[track_id]
+        return self.item_db.metadata_dict[track_id]
+
+    @staticmethod
+    def _overlap_score(left: set[str], right: set[str]) -> float:
+        if not left or not right:
+            return 0.0
+        return len(left & right) / len(left)
+
+    def _max_similarity_structured_rerank(
+        self,
+        ranked_lists: List[List[Any]],
+        gemini_tracks: List[Dict[str, Any]],
+        topk: int,
+    ) -> List[str]:
+        """Rerank max-similarity candidates with small structured music signals."""
+        max_scores = {}
+        best_rank = {}
+        hit_counts = defaultdict(int)
+
+        for ranked_items in ranked_lists:
+            for rank, item in enumerate(ranked_items, start=1):
+                if isinstance(item, tuple):
+                    track_id, score = item
+                else:
+                    track_id, score = item, 0.0
+                if track_id not in max_scores or score > max_scores[track_id]:
+                    max_scores[track_id] = score
+                best_rank[track_id] = min(best_rank.get(track_id, rank), rank)
+                hit_counts[track_id] += 1
+
+        query_tags = set()
+        query_decades = set()
+        for track in gemini_tracks:
+            query_tags.update(normalized_music_tags(track.get("tag_list"), max_tags=12))
+            decade = release_decade_text(track.get("release_date"))
+            if decade:
+                query_decades.add(decade)
+
+        reranked = []
+        for track_id, embedding_score in max_scores.items():
+            metadata = self._metadata_for_track(track_id)
+            track_tags = set(normalized_music_tags(metadata.get("tag_list"), max_tags=40))
+            artist_profile = set(metadata.get("artist_style_profile", []))
+            decade = metadata.get("release_decade") or release_decade_text(metadata.get("release_date"))
+
+            tag_score = self._overlap_score(query_tags, track_tags)
+            artist_score = self._overlap_score(query_tags, artist_profile)
+            decade_score = 1.0 if decade and decade in query_decades else 0.0
+
+            final_score = (
+                embedding_score
+                + self.rerank_tag_weight * tag_score
+                + self.rerank_artist_profile_weight * artist_score
+                + self.rerank_decade_weight * decade_score
+            )
+            reranked.append(
+                (
+                    track_id,
+                    final_score,
+                    embedding_score,
+                    hit_counts[track_id],
+                    best_rank[track_id],
+                )
+            )
+
+        reranked.sort(key=lambda item: (-item[1], -item[2], -item[3], item[4], item[0]))
+        return [track_id for track_id, *_ in reranked[:topk]]
+
     def _gemini_multi_query_fusion_retrieval(
         self,
         conversation_text: str,
@@ -237,6 +321,13 @@ class CRS_BASELINE:
                 self.retrieval.text_to_item_retrieval(query, topk=self.gemini_topk_per_reference)
                 for query in query_texts
             ]
+
+        if self.gemini_fusion_method == "max_similarity_structured_rerank":
+            return self._max_similarity_structured_rerank(
+                ranked_lists,
+                gemini_tracks,
+                topk=topk,
+            )
 
         if self.gemini_fusion_method == "max_similarity":
             return self._max_similarity_fusion(ranked_lists, topk=topk)
@@ -281,11 +372,19 @@ class CRS_BASELINE:
         """
         self.session_memory.append({"role": "user", "content": user_query})
         # stage0. system prompt
-        system_prompt = self._get_system_prompt(user_id)
+        system_prompt = "" if self.retrieval_only else self._get_system_prompt(user_id)
         # stage1. retrieval
         retrieval_input = "\n".join([f"{conversation['role']}: {conversation['content']}" for conversation in self.session_memory])
         retrieval_items = self.retrieval.text_to_item_retrieval(retrieval_input, topk=20)
         recommend_item = self.item_db.id_to_metadata(retrieval_items[0])
+        if self.retrieval_only:
+            return {
+                "user_id": user_id,
+                "user_query": user_query,
+                "retrieval_items": retrieval_items,
+                "recommend_item": recommend_item,
+                "response": "",
+            }
         # stage2. response generation
         response = self.lm.response_generation(system_prompt, self.session_memory, recommend_item)
         return {
@@ -335,7 +434,8 @@ class CRS_BASELINE:
             session_memory = data['session_memory'].copy()
             session_memory.append({"role": "user", "content": user_query})
 
-            sys_prompts.append(self._get_system_prompt(user_id))
+            if not self.retrieval_only:
+                sys_prompts.append(self._get_system_prompt(user_id))
             # Baseline retrieval method 
             # retrieval_input = "\n".join([f"{conversation['role']}: {conversation['content']}" for conversation in session_memory])
             # retrieval_inputs.append(retrieval_input)
@@ -416,10 +516,15 @@ class CRS_BASELINE:
             if not isinstance(request, str):
                 batch_retrieval_items[i] = request
 
-        recommend_items = [self.item_db.id_to_metadata(items[0]) for items in batch_retrieval_items]
+        recommend_items = [
+            None if self.retrieval_only else self.item_db.id_to_metadata(items[0])
+            for items in batch_retrieval_items
+        ]
 
         # Stage 2: Batch response generation
-        if hasattr(self.lm, 'batch_response_generation'):
+        if self.retrieval_only:
+            responses = [""] * len(batch_data)
+        elif hasattr(self.lm, 'batch_response_generation'):
             responses = self.lm.batch_response_generation(sys_prompts, session_memories, recommend_items)
         else:
             # Fallback to sequential generation if batch method not available
