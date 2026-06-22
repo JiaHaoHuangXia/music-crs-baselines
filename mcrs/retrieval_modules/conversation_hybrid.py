@@ -36,6 +36,7 @@ class CONVERSATION_HYBRID_MODEL:
         conversation_topk: int = 250,
         metadata_topk: int = 100,
         rrf_k: int = 60,
+        use_semantic_metadata: bool = False,
     ) -> None:
         self.dataset_name = dataset_name
         self.split_types = split_types
@@ -46,6 +47,7 @@ class CONVERSATION_HYBRID_MODEL:
         self.conversation_topk = conversation_topk
         self.metadata_topk = metadata_topk
         self.rrf_k = rrf_k
+        self.use_semantic_metadata = use_semantic_metadata
         self.index_dir = os.path.join(
             cache_dir,
             "conversation_hybrid",
@@ -71,6 +73,8 @@ class CONVERSATION_HYBRID_MODEL:
         return {item["track_id"]: item for item in metadata_concat_dataset}
 
     def _load_semantic_metadata(self):
+        if not self.use_semantic_metadata:
+            return None
         if SENTENCE_TRANSFORMER_MODEL is None:
             return None
         try:

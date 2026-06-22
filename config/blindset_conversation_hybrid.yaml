@@ -1,4 +1,4 @@
-lm_type: "meta-llama/Llama-3.2-1B-Instruct"
+lm_type: "template"
 retrieval_type: "conversation_hybrid"
 
 test_dataset_name: "talkpl-ai/TalkPlayData-Challenge-Blind-A"
@@ -19,7 +19,7 @@ corpus_types:
   - "release_date"
 
 cache_dir: "./cache"
-device: "cuda"
+device: "cpu"
 attn_implementation: "eager"
 clear_bert_cache: false
 
