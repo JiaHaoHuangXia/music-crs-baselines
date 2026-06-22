@@ -1,6 +1,7 @@
 from .bm25 import BM25_MODEL
 from .bert import BERT_MODEL
 from .sentence_transformer import SENTENCE_TRANSFORMER_MODEL
+from .conversation_hybrid import CONVERSATION_HYBRID_MODEL
 
 def load_retrieval_module(
         retrieval_type: str,
@@ -15,5 +16,7 @@ def load_retrieval_module(
         return BERT_MODEL(dataset_name, track_split_types, corpus_types, cache_dir)
     elif retrieval_type == "sentence_transformer":
         return SENTENCE_TRANSFORMER_MODEL(dataset_name, track_split_types, corpus_types, cache_dir)
+    elif retrieval_type == "conversation_hybrid":
+        return CONVERSATION_HYBRID_MODEL(dataset_name, track_split_types, corpus_types, cache_dir)
     else:
         raise ValueError(f"Unsupported retrieval type: {retrieval_type}")

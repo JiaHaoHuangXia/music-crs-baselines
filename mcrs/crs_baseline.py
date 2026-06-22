@@ -266,6 +266,17 @@ class CRS_BASELINE:
             system_prompt += self.role_prompt["personalization"] + '\n' + user_profile_str
         return system_prompt
 
+    def _format_retrieval_context(self, data: Dict[str, Any]) -> str:
+        """Build optional structured context for retrieval-only ranking."""
+        context_parts = []
+        conversation_goal = data.get("conversation_goal")
+        if conversation_goal:
+            context_parts.append(f"conversation_goal: {conversation_goal}")
+        user_profile = data.get("user_profile")
+        if user_profile:
+            context_parts.append(f"user_profile: {user_profile}")
+        return "\n".join(context_parts)
+
     def chat(self, user_query: str, user_id: Optional[str] = None) -> dict[str, Any]:
         """Run a single CRS turn: retrieve items and generate a response.
         Args:
@@ -343,6 +354,9 @@ class CRS_BASELINE:
                 f"{conversation['role']}: {conversation['content']}"
                 for conversation in session_memory
             ])
+            retrieval_context = self._format_retrieval_context(data)
+            if retrieval_context:
+                conversation_text = retrieval_context + "\n" + conversation_text
 
             if (
                 self.use_gemini_expansion

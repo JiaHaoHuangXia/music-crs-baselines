@@ -36,6 +36,21 @@ DATASET_SPLIT = "test"
 TRACK_METADATA_NAME = "talkpl-ai/TalkPlayData-Challenge-Track-Metadata"
 
 
+def format_context(value: Any) -> str:
+    """Convert nested dataset context into compact retrieval text."""
+    if not value:
+        return ""
+    if isinstance(value, dict):
+        return " ".join(
+            f"{key}: {format_context(inner_value)}"
+            for key, inner_value in sorted(value.items())
+            if format_context(inner_value)
+        )
+    if isinstance(value, list):
+        return ", ".join(str(item).strip() for item in value if str(item).strip())
+    return str(value).strip()
+
+
 def chat_history_parser(
     conversations: List[Dict[str, Any]],
     music_crs: Any,
@@ -162,6 +177,8 @@ def prepare_subset_data(
                     "session_memory": chat_history,
                     "session_id": session_id,
                     "turn_number": target_turn_number,
+                    "conversation_goal": format_context(item.get("conversation_goal")),
+                    "user_profile": format_context(item.get("user_profile")),
                 }
             )
             metadata.append(

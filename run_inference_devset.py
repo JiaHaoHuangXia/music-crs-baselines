@@ -14,6 +14,19 @@ import pandas as pd
 from omegaconf import OmegaConf
 import shutil
 
+def format_context(value):
+    if not value:
+        return ""
+    if isinstance(value, dict):
+        return " ".join(
+            f"{key}: {format_context(inner_value)}"
+            for key, inner_value in sorted(value.items())
+            if format_context(inner_value)
+        )
+    if isinstance(value, list):
+        return ", ".join(str(item).strip() for item in value if str(item).strip())
+    return str(value).strip()
+
 def chat_history_parser(conversations, music_crs, target_turn_number):
     """
     Parse conversation history up to a target turn.
@@ -68,11 +81,11 @@ def main(args):
         - Tracks progress with tqdm progress bar
         - Saves comprehensive results for evaluation
     """
-    print("Removing cache directory for preventing memory issues...")
+    print("Preparing retrieval cache...")
     #os.system("rm -rf cache")
-    if os.path.exists("cache"):
-        shutil.rmtree("cache")
     config = OmegaConf.load(f"config/{args.tid}.yaml")
+    if config.get("clear_cache", False) and os.path.exists("cache"):
+        shutil.rmtree("cache")
     music_crs = load_crs_baseline(
         lm_type=config.lm_type,
         retrieval_type=config.retrieval_type,
@@ -84,7 +97,21 @@ def main(args):
         cache_dir=config.cache_dir,
         device=config.device,
         attn_implementation=config.attn_implementation,
-        dtype=torch.bfloat16
+        dtype=torch.bfloat16,
+        use_gemini_expansion=config.get("use_gemini_expansion", False),
+        gemini_model_name=config.get("gemini_model_name", "gemini-3.1-flash-lite"),
+        gemini_cache_dir=config.get("gemini_cache_dir", "./cache/gemini_expansions"),
+        gemini_expansion_mode=config.get("gemini_expansion_mode", "tag_query"),
+        gemini_topk_per_reference=config.get("gemini_topk_per_reference", 50),
+        gemini_rrf_k=config.get("gemini_rrf_k", 60),
+        include_original_query_in_fusion=config.get(
+            "include_original_query_in_fusion",
+            False,
+        ),
+        original_query_weight=config.get("original_query_weight", 2.0),
+        gemini_reference_weight=config.get("gemini_reference_weight", 1.0),
+        gemini_max_reference_tracks=config.get("gemini_max_reference_tracks", None),
+        gemini_fusion_method=config.get("gemini_fusion_method", "rrf"),
     )
     db = load_dataset(config.test_dataset_name, split="test")
     # Prepare all batch data at once
@@ -97,7 +124,11 @@ def main(args):
             batch_data.append({
                 'user_query': user_query,
                 'user_id': user_id,
-                'session_memory': chat_history
+                'session_memory': chat_history,
+                'session_id': session_id,
+                'turn_number': target_turn_number,
+                'conversation_goal': format_context(item.get('conversation_goal')),
+                'user_profile': format_context(item.get('user_profile')),
             })
             metadata.append({
                 'session_id': session_id,

@@ -13,6 +13,19 @@ import pandas as pd
 from omegaconf import OmegaConf
 import shutil
 
+def format_context(value):
+    if not value:
+        return ""
+    if isinstance(value, dict):
+        return " ".join(
+            f"{key}: {format_context(inner_value)}"
+            for key, inner_value in sorted(value.items())
+            if format_context(inner_value)
+        )
+    if isinstance(value, list):
+        return ", ".join(str(item).strip() for item in value if str(item).strip())
+    return str(value).strip()
+
 def chat_history_parser(conversations, music_crs, target_turn_number):
     """
     Parse conversation history up to a target turn.
@@ -67,12 +80,12 @@ def main(args):
         - Tracks progress with tqdm progress bar
         - Saves comprehensive results for evaluation
     """
-    print("Removing cache directory for preventing memory issues...")
+    print("Preparing retrieval cache...")
     #os.system("rm -rf cache")
-    bert_cache = os.path.join("cache", "bert")
-    if os.path.exists(bert_cache):
-        shutil.rmtree(bert_cache)
     config = OmegaConf.load(f"config/{args.tid}.yaml")
+    bert_cache = os.path.join("cache", "bert")
+    if config.get("clear_bert_cache", True) and os.path.exists(bert_cache):
+        shutil.rmtree(bert_cache)
     music_crs = load_crs_baseline(
         lm_type=config.lm_type,
         retrieval_type=config.retrieval_type,
@@ -139,6 +152,8 @@ def main(args):
             "session_memory": chat_history,
             "session_id": session_id,
             "turn_number": target_turn_number,
+            "conversation_goal": format_context(item.get("conversation_goal")),
+            "user_profile": format_context(item.get("user_profile")),
         })
 
         metadata.append({
