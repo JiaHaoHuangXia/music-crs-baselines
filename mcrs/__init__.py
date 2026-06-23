@@ -27,6 +27,12 @@ def load_crs_baseline(
     rerank_tag_weight=0.04,
     rerank_artist_profile_weight=0.04,
     rerank_decade_weight=0.02,
+    hybrid_bm25_corpus_types=None,
+    hybrid_bm25_topk_per_reference=100,
+    hybrid_bm25_weight=0.12,
+    hybrid_artist_match_weight=0.03,
+    hybrid_album_match_weight=0.02,
+    hybrid_multi_source_weight=0.03,
     retrieval_only=False,
 ):
     return CRS_BASELINE(
@@ -55,5 +61,11 @@ def load_crs_baseline(
         rerank_tag_weight=rerank_tag_weight,
         rerank_artist_profile_weight=rerank_artist_profile_weight,
         rerank_decade_weight=rerank_decade_weight,
+        hybrid_bm25_corpus_types=hybrid_bm25_corpus_types,
+        hybrid_bm25_topk_per_reference=hybrid_bm25_topk_per_reference,
+        hybrid_bm25_weight=hybrid_bm25_weight,
+        hybrid_artist_match_weight=hybrid_artist_match_weight,
+        hybrid_album_match_weight=hybrid_album_match_weight,
+        hybrid_multi_source_weight=hybrid_multi_source_weight,
         retrieval_only=retrieval_only,
     )

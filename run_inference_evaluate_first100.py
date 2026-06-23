@@ -135,6 +135,12 @@ def load_model(
         rerank_tag_weight=config.get("rerank_tag_weight", 0.04),
         rerank_artist_profile_weight=config.get("rerank_artist_profile_weight", 0.04),
         rerank_decade_weight=config.get("rerank_decade_weight", 0.02),
+        hybrid_bm25_corpus_types=config.get("hybrid_bm25_corpus_types", None),
+        hybrid_bm25_topk_per_reference=config.get("hybrid_bm25_topk_per_reference", 100),
+        hybrid_bm25_weight=config.get("hybrid_bm25_weight", 0.12),
+        hybrid_artist_match_weight=config.get("hybrid_artist_match_weight", 0.03),
+        hybrid_album_match_weight=config.get("hybrid_album_match_weight", 0.02),
+        hybrid_multi_source_weight=config.get("hybrid_multi_source_weight", 0.03),
         retrieval_only=config.get("retrieval_only", False),
     )
 

@@ -6,7 +6,7 @@ from mcrs.db_item import MusicCatalogDB
 from mcrs.db_user import UserProfileDB
 from mcrs.lm_modules import load_lm_module
 from mcrs.retrieval_modules import load_retrieval_module
-from mcrs.controlled_tags import normalized_music_tags
+from mcrs.controlled_tags import normalize_tag, normalized_music_tags
 from mcrs.style_profiles import release_decade_text, weighted_metadata_lines
 
 from mcrs.query_expansion.gemini_expander import GeminiExpander
@@ -59,6 +59,12 @@ class CRS_BASELINE:
         rerank_tag_weight: float = 0.04,
         rerank_artist_profile_weight: float = 0.04,
         rerank_decade_weight: float = 0.02,
+        hybrid_bm25_corpus_types: Optional[list[str]] = None,
+        hybrid_bm25_topk_per_reference: int = 100,
+        hybrid_bm25_weight: float = 0.12,
+        hybrid_artist_match_weight: float = 0.03,
+        hybrid_album_match_weight: float = 0.02,
+        hybrid_multi_source_weight: float = 0.03,
         retrieval_only: bool = False,
     ):
         """Initialize the CRS baseline components.
@@ -100,13 +106,29 @@ class CRS_BASELINE:
         self.rerank_tag_weight = rerank_tag_weight
         self.rerank_artist_profile_weight = rerank_artist_profile_weight
         self.rerank_decade_weight = rerank_decade_weight
+        self.hybrid_bm25_corpus_types = hybrid_bm25_corpus_types or [
+            "track_name",
+            "artist_name",
+            "album_name",
+            "tag_list",
+        ]
+        self.hybrid_bm25_topk_per_reference = hybrid_bm25_topk_per_reference
+        self.hybrid_bm25_weight = hybrid_bm25_weight
+        self.hybrid_artist_match_weight = hybrid_artist_match_weight
+        self.hybrid_album_match_weight = hybrid_album_match_weight
+        self.hybrid_multi_source_weight = hybrid_multi_source_weight
         valid_gemini_modes = {"tag_query", "multi_query_fusion"}
         if self.gemini_expansion_mode not in valid_gemini_modes:
             raise ValueError(
                 f"Unknown gemini_expansion_mode='{self.gemini_expansion_mode}'. "
                 f"Expected one of {sorted(valid_gemini_modes)}."
             )
-        valid_fusion_methods = {"rrf", "max_similarity", "max_similarity_structured_rerank"}
+        valid_fusion_methods = {
+            "rrf",
+            "max_similarity",
+            "max_similarity_structured_rerank",
+            "hybrid_structured_rerank",
+        }
         if self.gemini_fusion_method not in valid_fusion_methods:
             raise ValueError(
                 f"Unknown gemini_fusion_method='{self.gemini_fusion_method}'. "
@@ -132,6 +154,15 @@ class CRS_BASELINE:
 
         self.lm = None if self.retrieval_only else load_lm_module(self.lm_type, self.device, self.attn_implementation, self.dtype)
         self.retrieval = load_retrieval_module(self.retrieval_type, self.item_db_name, self.track_split_types, self.corpus_types, self.cache_dir)
+        self.lexical_retrieval = None
+        if self.gemini_fusion_method == "hybrid_structured_rerank":
+            self.lexical_retrieval = load_retrieval_module(
+                "bm25",
+                self.item_db_name,
+                self.track_split_types,
+                self.hybrid_bm25_corpus_types,
+                self.cache_dir,
+            )
         self.item_db = MusicCatalogDB(self.item_db_name, self.track_split_types, self.corpus_types)
         self.user_db = None if self.retrieval_only else UserProfileDB(self.user_db_name, self.user_split_types)
         self.prompts_dir = os.path.join(os.path.dirname(__file__), "system_prompts")
@@ -220,6 +251,16 @@ class CRS_BASELINE:
             return 0.0
         return len(left & right) / len(left)
 
+    @staticmethod
+    def _metadata_text_set(value: Any) -> set[str]:
+        if value is None:
+            return set()
+        if isinstance(value, list):
+            values = value
+        else:
+            values = str(value).split(",")
+        return {normalize_tag(item) for item in values if normalize_tag(item)}
+
     def _max_similarity_structured_rerank(
         self,
         ranked_lists: List[List[Any]],
@@ -280,6 +321,91 @@ class CRS_BASELINE:
         reranked.sort(key=lambda item: (-item[1], -item[2], -item[3], item[4], item[0]))
         return [track_id for track_id, *_ in reranked[:topk]]
 
+    def _hybrid_structured_rerank(
+        self,
+        dense_ranked_lists: List[List[Any]],
+        lexical_ranked_lists: List[List[Any]],
+        gemini_tracks: List[Dict[str, Any]],
+        topk: int,
+    ) -> List[str]:
+        """Fuse dense and BM25 candidates, then rerank with lightweight metadata signals."""
+        dense_scores = {}
+        lexical_scores = defaultdict(float)
+        best_rank = {}
+        source_hits = defaultdict(int)
+
+        for ranked_items in dense_ranked_lists:
+            for rank, item in enumerate(ranked_items, start=1):
+                if isinstance(item, tuple):
+                    track_id, score = item
+                else:
+                    track_id, score = item, 0.0
+                dense_scores[track_id] = max(dense_scores.get(track_id, float("-inf")), score)
+                best_rank[track_id] = min(best_rank.get(track_id, rank), rank)
+                source_hits[track_id] += 1
+
+        for ranked_items in lexical_ranked_lists:
+            for rank, item in enumerate(ranked_items, start=1):
+                track_id = item[0] if isinstance(item, tuple) else item
+                lexical_scores[track_id] = max(lexical_scores[track_id], 1.0 / rank)
+                best_rank[track_id] = min(best_rank.get(track_id, rank), rank)
+                source_hits[track_id] += 1
+                if track_id not in dense_scores:
+                    dense_scores[track_id] = 0.0
+
+        query_tags = set()
+        query_decades = set()
+        query_artists = set()
+        query_albums = set()
+        for track in gemini_tracks:
+            query_tags.update(normalized_music_tags(track.get("tag_list"), max_tags=20))
+            query_artists.update(self._metadata_text_set(track.get("artist_name")))
+            query_albums.update(self._metadata_text_set(track.get("album_name")))
+            decade = release_decade_text(track.get("release_date"))
+            if decade:
+                query_decades.add(decade)
+
+        max_source_hits = max(source_hits.values(), default=1)
+        reranked = []
+        for track_id, embedding_score in dense_scores.items():
+            metadata = self._metadata_for_track(track_id)
+            track_tags = set(normalized_music_tags(metadata.get("tag_list"), max_tags=80))
+            artist_profile = set(metadata.get("artist_style_profile", []))
+            track_artists = self._metadata_text_set(metadata.get("artist_name"))
+            track_albums = self._metadata_text_set(metadata.get("album_name"))
+            decade = metadata.get("release_decade") or release_decade_text(metadata.get("release_date"))
+
+            tag_score = self._overlap_score(query_tags, track_tags)
+            artist_profile_score = self._overlap_score(query_tags, artist_profile)
+            decade_score = 1.0 if decade and decade in query_decades else 0.0
+            artist_match = 1.0 if query_artists and query_artists & track_artists else 0.0
+            album_match = 1.0 if query_albums and query_albums & track_albums else 0.0
+            source_score = source_hits[track_id] / max_source_hits
+
+            final_score = (
+                embedding_score
+                + self.hybrid_bm25_weight * lexical_scores[track_id]
+                + self.rerank_tag_weight * tag_score
+                + self.rerank_artist_profile_weight * artist_profile_score
+                + self.rerank_decade_weight * decade_score
+                + self.hybrid_artist_match_weight * artist_match
+                + self.hybrid_album_match_weight * album_match
+                + self.hybrid_multi_source_weight * source_score
+            )
+            reranked.append(
+                (
+                    track_id,
+                    final_score,
+                    embedding_score,
+                    lexical_scores[track_id],
+                    source_hits[track_id],
+                    best_rank[track_id],
+                )
+            )
+
+        reranked.sort(key=lambda item: (-item[1], -item[2], -item[3], -item[4], item[5], item[0]))
+        return [track_id for track_id, *_ in reranked[:topk]]
+
     def _gemini_multi_query_fusion_retrieval(
         self,
         conversation_text: str,
@@ -321,6 +447,29 @@ class CRS_BASELINE:
                 self.retrieval.text_to_item_retrieval(query, topk=self.gemini_topk_per_reference)
                 for query in query_texts
             ]
+
+        if self.gemini_fusion_method == "hybrid_structured_rerank":
+            lexical_ranked_lists = []
+            if self.lexical_retrieval is not None:
+                if hasattr(self.lexical_retrieval, "batch_text_to_item_retrieval"):
+                    lexical_ranked_lists = self.lexical_retrieval.batch_text_to_item_retrieval(
+                        query_texts,
+                        topk=self.hybrid_bm25_topk_per_reference,
+                    )
+                else:
+                    lexical_ranked_lists = [
+                        self.lexical_retrieval.text_to_item_retrieval(
+                            query,
+                            topk=self.hybrid_bm25_topk_per_reference,
+                        )
+                        for query in query_texts
+                    ]
+            return self._hybrid_structured_rerank(
+                ranked_lists,
+                lexical_ranked_lists,
+                gemini_tracks,
+                topk=topk,
+            )
 
         if self.gemini_fusion_method == "max_similarity_structured_rerank":
             return self._max_similarity_structured_rerank(

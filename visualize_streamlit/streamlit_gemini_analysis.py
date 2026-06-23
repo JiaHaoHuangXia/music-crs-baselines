@@ -125,6 +125,32 @@ MANUAL_RESULTS = [
 
 DEVSET_SUBSET_RESULTS = [
     {
+        "experiment": "MiniLM + artist profile + decade + BM25 hybrid reranker",
+        "split": "Devset first 50 conversations",
+        "turns_evaluated": 400,
+        "ndcg@1": 0.0325,
+        "ndcg@10": 0.08925567039128843,
+        "ndcg@20": 0.10458119860417942,
+        "catalog_diversity": 0.06827983259331648,
+        "lexical_diversity": 0.0,
+        "total_catalog_size": 47071,
+        "source": "Local evaluator",
+        "note": "Current best local embedding/reranking run. Adds BM25 lexical candidates over title, artist, album, and tags before structured reranking.",
+    },
+    {
+        "experiment": "MiniLM + artist profile + decade + structured reranker",
+        "split": "Devset first 50 conversations",
+        "turns_evaluated": 400,
+        "ndcg@1": 0.0400,
+        "ndcg@10": 0.08130748412086836,
+        "ndcg@20": 0.09812400600576054,
+        "catalog_diversity": 0.06694142890527076,
+        "lexical_diversity": 0.0,
+        "total_catalog_size": 47071,
+        "source": "Local evaluator",
+        "note": "Previous best local enriched embedding run before adding BM25 lexical candidate generation.",
+    },
+    {
         "experiment": "BM25 + Gemini + tag_list",
         "split": "Devset first 50 conversations",
         "turns_evaluated": 400,
@@ -694,7 +720,9 @@ def render_model_results():
     st.markdown(
         """
         - For this challenge, the most important retrieval signal is nDCG@20: whether the exact target track appears in the top 20.
-        - BM25 + tag_list is the strongest current system, with the best nDCG@20 and composite score.
+        - The current best local devset system is the MiniLM + artist profile + decade + BM25 hybrid reranker.
+        - The biggest recent gain came from adding BM25 lexical candidates over title, artist, album, and tags before structured reranking.
+        - Gemini multi-query helps dense retrieval when fused carefully, but BM25 lexical evidence is important for exact target-track recovery.
         - Gemini can improve natural-language response quality, but it does not consistently improve exact hidden-track retrieval.
         - BERT variants retrieve semantically plausible neighborhoods, but they are weak for this evaluation because nDCG@20 rewards exact track recovery.
         - The most useful thesis comparison is BM25 vs BM25 + tag_list vs BERT/Gemini variants, because it shows the difference between lexical matching and semantic query drift.
@@ -1449,7 +1477,13 @@ def render_oracle_check(ground_truth_df, gemini_df, retrieved_df, selected_sessi
         )
     else:
         reference_summary["best_ground_truth_rank"] = None
-    reference_summary["best_ground_truth_rank"] = reference_summary["best_ground_truth_rank"].fillna("not found")
+    rank_values = pd.to_numeric(
+        reference_summary["best_ground_truth_rank"],
+        errors="coerce",
+    )
+    reference_summary["best_ground_truth_rank"] = (
+        rank_values.astype("Int64").astype(str).replace("<NA>", "not found")
+    )
     st.dataframe(reference_summary, width="stretch", hide_index=True)
 
 
