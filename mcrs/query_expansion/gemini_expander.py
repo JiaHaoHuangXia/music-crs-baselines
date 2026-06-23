@@ -60,6 +60,43 @@ Conversation:
 {conversation_text}
 """
 
+    def build_controlled_keyword_prompt(self, conversation_text: str) -> str:
+        return f"""
+Extract compact searchable music metadata terms from the conversation below.
+
+These terms will be used for BM25 keyword retrieval over a fixed music catalog.
+Do not recommend songs. Do not invent artists, albums, or tracks.
+
+Return only valid JSON. Do not use markdown. Do not add explanations.
+
+The output MUST be one JSON object with this exact schema:
+{{
+  "track_titles": [string],
+  "artists": [string],
+  "albums": [string],
+  "genres": [string],
+  "moods": [string],
+  "instruments": [string],
+  "themes": [string],
+  "era": [string],
+  "must_include_terms": [string],
+  "avoid_terms": [string]
+}}
+
+Rules:
+- Assume the current turn is the last user turn in the conversation.
+- Focus on the current user request.
+- Use previous turns only for preferences, corrections, constraints, and disliked items.
+- Extract only terms explicitly stated or strongly implied by the conversation.
+- Prefer short metadata-like keywords, not full sentences.
+- If there is no evidence for a field, return an empty list for that field.
+- Keep each list short: at most 5 terms.
+- avoid_terms should contain disliked artists, genres, moods, or constraints only when clearly stated.
+
+Conversation:
+{conversation_text}
+"""
+
     def _to_list_of_strings(self, value: Any, default: str = "") -> list[str]:
         """
         Convert a value into a clean list of strings.
@@ -191,6 +228,59 @@ Conversation:
 
         return cleaned_tracks[:5]
 
+    def _normalize_keyword_payload(self, payload: Any) -> dict[str, list[str]]:
+        if not isinstance(payload, dict):
+            raise ValueError("Gemini keyword output is not a JSON object.")
+
+        keys = [
+            "track_titles",
+            "artists",
+            "albums",
+            "genres",
+            "moods",
+            "instruments",
+            "themes",
+            "era",
+            "must_include_terms",
+            "avoid_terms",
+        ]
+
+        normalized = {}
+        for key in keys:
+            values = self._to_list_of_strings(payload.get(key))[:5]
+            normalized[key] = list(dict.fromkeys(values))
+
+        return normalized
+
+    def keywords_to_query(self, payload: dict[str, list[str]]) -> str:
+        payload = self._normalize_keyword_payload(payload)
+
+        weighted_parts = []
+        field_weights = {
+            "track_titles": 4,
+            "artists": 4,
+            "albums": 3,
+            "genres": 2,
+            "moods": 2,
+            "instruments": 2,
+            "themes": 2,
+            "era": 2,
+            "must_include_terms": 3,
+        }
+
+        for field, weight in field_weights.items():
+            values = payload.get(field, [])
+            if not values:
+                continue
+            line = f"{field}: {', '.join(values)}"
+            weighted_parts.extend([line] * weight)
+
+        avoid_terms = payload.get("avoid_terms", [])
+        if avoid_terms:
+            weighted_parts.append(f"avoid_terms: {', '.join(avoid_terms)}")
+
+        return "\n".join(weighted_parts)
+
     def pseudo_tracks_to_query2(self, pseudo_tracks):
         """
         Convert pseudo-track metadata into a text query for retrieval.
@@ -245,9 +335,10 @@ Conversation:
 
         return "expanded_tags: " + ", ".join(all_tags)
 
-    def _cache_path(self, session_id, turn_number):
+    def _cache_path(self, session_id, turn_number, suffix: str = ""):
         safe_session = str(session_id).replace("/", "_").replace("\\", "_")
-        return self.cache_dir / f"{safe_session}_turn_{turn_number}.json"
+        suffix_text = f"_{suffix}" if suffix else ""
+        return self.cache_dir / f"{safe_session}_turn_{turn_number}{suffix_text}.json"
 
     def _call_gemini_with_retry(self, prompt: str):
         """
@@ -370,6 +461,61 @@ Conversation:
         time.sleep(self.sleep_seconds)
 
         return pseudo_tracks
+
+    def expand_keywords(self, conversation_text, session_id=None, turn_number=None):
+        cache_path = None
+
+        if session_id is not None and turn_number is not None:
+            cache_path = self._cache_path(session_id, turn_number, suffix="keywords")
+
+            if cache_path.exists():
+                try:
+                    print(f"Using cached Gemini keyword expansion: {cache_path}", flush=True)
+                    with open(cache_path, "r", encoding="utf-8") as f:
+                        payload = json.load(f)
+
+                    return self._normalize_keyword_payload(payload)
+
+                except Exception as e:
+                    print(f"Cached Gemini keyword expansion invalid. Deleting cache file. Error: {e}", flush=True)
+                    try:
+                        cache_path.unlink()
+                    except OSError:
+                        pass
+
+        prompt = self.build_controlled_keyword_prompt(conversation_text)
+        response = self._call_gemini_with_retry(prompt)
+
+        if not response.text:
+            raise ValueError("Gemini returned an empty response.")
+
+        raw_text = response.text.strip()
+
+        try:
+            json_text = self._extract_json_text(raw_text)
+            payload = json.loads(json_text)
+            payload = self._normalize_keyword_payload(payload)
+        except Exception as e:
+            print("Gemini returned invalid or unexpected keyword JSON.", flush=True)
+            print("Raw Gemini response:", flush=True)
+            print(raw_text, flush=True)
+            raise e
+
+        if cache_path is not None:
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+
+        time.sleep(self.sleep_seconds)
+
+        return payload
+
+    def expand_controlled_query(self, conversation_text, session_id=None, turn_number=None):
+        payload = self.expand_keywords(
+            conversation_text,
+            session_id=session_id,
+            turn_number=turn_number,
+        )
+        return self.keywords_to_query(payload)
 
     def expand(self, conversation_text, session_id=None, turn_number=None):
         """

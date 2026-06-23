@@ -117,7 +117,11 @@ class CRS_BASELINE:
         self.hybrid_artist_match_weight = hybrid_artist_match_weight
         self.hybrid_album_match_weight = hybrid_album_match_weight
         self.hybrid_multi_source_weight = hybrid_multi_source_weight
-        valid_gemini_modes = {"tag_query", "multi_query_fusion"}
+        valid_gemini_modes = {
+            "tag_query",
+            "multi_query_fusion",
+            "controlled_keyword_query",
+        }
         if self.gemini_expansion_mode not in valid_gemini_modes:
             raise ValueError(
                 f"Unknown gemini_expansion_mode='{self.gemini_expansion_mode}'. "
@@ -618,15 +622,22 @@ class CRS_BASELINE:
                 turn_number = data.get("turn_number")
 
                 try:
-                    gemini_query = self.gemini_expander.expand(
-                        conversation_text,
-                        session_id=session_id,
-                        turn_number=turn_number,
-                    )
+                    if self.gemini_expansion_mode == "controlled_keyword_query":
+                        gemini_query = self.gemini_expander.expand_controlled_query(
+                            conversation_text,
+                            session_id=session_id,
+                            turn_number=turn_number,
+                        )
+                    else:
+                        gemini_query = self.gemini_expander.expand(
+                            conversation_text,
+                            session_id=session_id,
+                            turn_number=turn_number,
+                        )
 
                     retrieval_input = (
                         conversation_text
-                        + "\n\nGemini-expanded search terms:\n"
+                        + "\n\nGemini-controlled BM25 search terms:\n"
                         + gemini_query
                     )
                 except Exception as e:
