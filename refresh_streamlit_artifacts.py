@@ -10,6 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from export_bm25_explanation_to_csv import export_bm25_explanations
 from export_devset_conversation_details import export_details
 from export_devset_gemini_cache_to_csv import export_cache
 
@@ -32,7 +33,16 @@ def main() -> None:
         "--gemini_cache_dir",
         type=Path,
         default=PROJECT_ROOT / "cache" / "gemini_expansions_devset_first100",
-        help="Gemini cache used by the same run.",
+        help="Gemini reference-track cache used for the Gemini comparison and embedding map.",
+    )
+    parser.add_argument(
+        "--bm25_keyword_cache_dir",
+        type=Path,
+        default=None,
+        help=(
+            "Gemini controlled-keyword cache used for the BM25 explanation page. "
+            "Defaults to --gemini_cache_dir for backwards compatibility."
+        ),
     )
     parser.add_argument(
         "--corpus_types",
@@ -71,20 +81,30 @@ def main() -> None:
     gemini_cache_dir = args.gemini_cache_dir
     if not gemini_cache_dir.is_absolute():
         gemini_cache_dir = PROJECT_ROOT / gemini_cache_dir
+    bm25_keyword_cache_dir = args.bm25_keyword_cache_dir or args.gemini_cache_dir
+    if not bm25_keyword_cache_dir.is_absolute():
+        bm25_keyword_cache_dir = PROJECT_ROOT / bm25_keyword_cache_dir
 
     conversation_output = STREAMLIT_DIR / "devset_conversation_details.json"
     gemini_ground_truth_output = STREAMLIT_DIR / "devset_gemini_ground_truth_table.csv"
+    bm25_explanation_output = STREAMLIT_DIR / "bm25_explanation_table.csv"
     embedding_projection_output = STREAMLIT_DIR / "gemini_embedding_projection.csv"
 
     print("Refreshing Streamlit artifacts from:")
     print(f"  run_dir: {run_dir}")
     print(f"  gemini_cache_dir: {gemini_cache_dir}")
+    print(f"  bm25_keyword_cache_dir: {bm25_keyword_cache_dir}")
 
     export_details(run_dir=run_dir, output_path=conversation_output)
     export_cache(
         cache_dir=gemini_cache_dir,
         ground_truth_path=run_dir / "ground_truth.json",
         output_path=gemini_ground_truth_output,
+    )
+    export_bm25_explanations(
+        run_dir=run_dir,
+        gemini_cache_dir=bm25_keyword_cache_dir,
+        output_path=bm25_explanation_output,
     )
 
     if args.skip_embedding_projection:

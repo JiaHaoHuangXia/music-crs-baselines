@@ -141,6 +141,9 @@ def export_cache(
     skipped_cache_files = 0
 
     for cache_path in sorted(cache_dir.glob("*.json")):
+        if cache_path.stem.endswith("_keywords"):
+            skipped_cache_files += 1
+            continue
         session_id, turn_number = parse_cache_filename(cache_path)
         truth = ground_truth.get((session_id, turn_number))
         if truth is None:

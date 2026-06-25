@@ -1,4 +1,5 @@
 import os
+import re
 import torch
 from collections import defaultdict
 from typing import Optional, Any, List, Dict
@@ -6,7 +7,7 @@ from mcrs.db_item import MusicCatalogDB
 from mcrs.db_user import UserProfileDB
 from mcrs.lm_modules import load_lm_module
 from mcrs.retrieval_modules import load_retrieval_module
-from mcrs.controlled_tags import normalize_tag, normalized_music_tags
+from mcrs.controlled_tags import normalize_music_tag, normalize_tag, normalized_music_tags
 from mcrs.style_profiles import release_decade_text, weighted_metadata_lines
 
 from mcrs.query_expansion.gemini_expander import GeminiExpander
@@ -48,6 +49,8 @@ class CRS_BASELINE:
         use_gemini_expansion: bool = False,
         gemini_model_name: str = "gemini-3.1-flash-lite",
         gemini_cache_dir: str = "./cache/gemini_expansions",
+        gemini_keyword_field_weights: Optional[dict[str, int]] = None,
+        gemini_keyword_block_weight: int = 1,
         gemini_expansion_mode: str = "tag_query",
         gemini_topk_per_reference: int = 50,
         gemini_rrf_k: int = 60,
@@ -65,6 +68,14 @@ class CRS_BASELINE:
         hybrid_artist_match_weight: float = 0.03,
         hybrid_album_match_weight: float = 0.02,
         hybrid_multi_source_weight: float = 0.03,
+        use_query_type_routing: bool = False,
+        query_type_candidate_topk: int = 100,
+        query_type_rank_weight: float = 1.0,
+        query_type_title_weight: float = 0.80,
+        query_type_artist_weight: float = 0.55,
+        query_type_album_weight: float = 0.35,
+        query_type_decade_weight: float = 0.18,
+        query_type_negative_weight: float = 0.35,
         retrieval_only: bool = False,
     ):
         """Initialize the CRS baseline components.
@@ -95,6 +106,8 @@ class CRS_BASELINE:
 
         # Gemini query expansion
         self.use_gemini_expansion = use_gemini_expansion
+        self.gemini_keyword_field_weights = gemini_keyword_field_weights
+        self.gemini_keyword_block_weight = gemini_keyword_block_weight
         self.gemini_expansion_mode = gemini_expansion_mode
         self.gemini_topk_per_reference = gemini_topk_per_reference
         self.gemini_rrf_k = gemini_rrf_k
@@ -117,6 +130,14 @@ class CRS_BASELINE:
         self.hybrid_artist_match_weight = hybrid_artist_match_weight
         self.hybrid_album_match_weight = hybrid_album_match_weight
         self.hybrid_multi_source_weight = hybrid_multi_source_weight
+        self.use_query_type_routing = use_query_type_routing
+        self.query_type_candidate_topk = query_type_candidate_topk
+        self.query_type_rank_weight = query_type_rank_weight
+        self.query_type_title_weight = query_type_title_weight
+        self.query_type_artist_weight = query_type_artist_weight
+        self.query_type_album_weight = query_type_album_weight
+        self.query_type_decade_weight = query_type_decade_weight
+        self.query_type_negative_weight = query_type_negative_weight
         valid_gemini_modes = {
             "tag_query",
             "multi_query_fusion",
@@ -152,6 +173,7 @@ class CRS_BASELINE:
             self.gemini_expander = GeminiExpander(
                 model_name=gemini_model_name,
                 cache_dir=gemini_cache_dir,
+                keyword_field_weights=gemini_keyword_field_weights,
             )
         else:
             self.gemini_expander = None
@@ -264,6 +286,166 @@ class CRS_BASELINE:
         else:
             values = str(value).split(",")
         return {normalize_tag(item) for item in values if normalize_tag(item)}
+
+    @staticmethod
+    def _field_values_from_text(text: str, field: str) -> list[str]:
+        pattern = re.compile(rf"{re.escape(field)}:\s*([^\n]+)", re.IGNORECASE)
+        values = []
+        for match in pattern.finditer(text or ""):
+            values.extend(part.strip() for part in match.group(1).split(","))
+        return [value for value in values if value]
+
+    @staticmethod
+    def _contains_phrase(text: str, phrase: str) -> bool:
+        phrase = normalize_tag(phrase)
+        if not phrase:
+            return False
+        return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", normalize_tag(text)) is not None
+
+    def _metadata_from_history_message(self, message: dict[str, Any]) -> Optional[dict[str, Any]]:
+        content = str(message.get("content", ""))
+        match = re.search(r"track_id:\s*([^,\n]+)", content, re.IGNORECASE)
+        if not match:
+            return None
+        track_id = match.group(1).strip()
+        return self.item_db.metadata_dict.get(track_id)
+
+    def _query_type_features(
+        self,
+        session_memory: list[dict[str, Any]],
+        retrieval_input: str,
+    ) -> dict[str, Any]:
+        current_query = str(session_memory[-1].get("content", "")) if session_memory else ""
+        current_query_norm = normalize_tag(current_query)
+        previous_metadata = [
+            metadata
+            for message in session_memory[:-1]
+            if message.get("role") == "assistant"
+            for metadata in [self._metadata_from_history_message(message)]
+            if metadata is not None
+        ]
+
+        structured_terms = {
+            "titles": set(self._field_values_from_text(retrieval_input, "track_titles")),
+            "artists": set(self._field_values_from_text(retrieval_input, "artists")),
+            "albums": set(self._field_values_from_text(retrieval_input, "albums")),
+            "decades": set(self._field_values_from_text(retrieval_input, "era")),
+            "avoid": set(self._field_values_from_text(retrieval_input, "avoid_terms")),
+        }
+
+        previous_artists = set()
+        for metadata in previous_metadata:
+            previous_artists.update(self._metadata_text_set(metadata.get("artist_name")))
+
+        same_artist_intent = any(
+            phrase in current_query_norm
+            for phrase in [
+                "same artist",
+                "same band",
+                "by them",
+                "from them",
+                "another one by",
+                "more by",
+            ]
+        )
+        explicit_artist_intent = any(
+            phrase in current_query_norm
+            for phrase in [" by ", " from ", " song by ", " track by ", " artist "]
+        )
+        explicit_title_intent = any(
+            self._contains_phrase(current_query_norm, title)
+            for title in structured_terms["titles"]
+        )
+        explicit_album_intent = any(
+            self._contains_phrase(current_query_norm, album)
+            for album in structured_terms["albums"]
+        )
+        decade_intent = bool(
+            re.search(r"\b(19[5-9]0s|20[0-2]0s|50s|60s|70s|80s|90s|00s|2000s|2010s|10s)\b", current_query_norm)
+        )
+        negative_intent = any(
+            phrase in current_query_norm
+            for phrase in [
+                "not ",
+                "no ",
+                "without ",
+                "less ",
+                "avoid ",
+                "don't want",
+                "do not want",
+            ]
+        )
+
+        route_types = set()
+        if same_artist_intent and previous_artists:
+            route_types.add("same_artist")
+        if explicit_title_intent:
+            route_types.add("title")
+        if explicit_album_intent:
+            route_types.add("album")
+        if explicit_artist_intent and any(
+            self._contains_phrase(current_query_norm, artist)
+            for artist in structured_terms["artists"]
+        ):
+            route_types.add("artist")
+        if decade_intent:
+            route_types.add("decade")
+        if negative_intent and structured_terms["avoid"]:
+            route_types.add("negative")
+
+        return {
+            "route_types": route_types,
+            "titles": {normalize_tag(value) for value in structured_terms["titles"]},
+            "artists": {normalize_tag(value) for value in structured_terms["artists"]},
+            "albums": {normalize_tag(value) for value in structured_terms["albums"]},
+            "decades": {normalize_tag(value) for value in structured_terms["decades"]},
+            "avoid": {normalize_music_tag(value) for value in structured_terms["avoid"]},
+            "previous_artists": previous_artists,
+        }
+
+    def _query_type_route_rerank(
+        self,
+        ranked_items: list[str],
+        session_memory: list[dict[str, Any]],
+        retrieval_input: str,
+        topk: int = 20,
+    ) -> list[str]:
+        features = self._query_type_features(session_memory, retrieval_input)
+        route_types = features["route_types"]
+        if not route_types:
+            return ranked_items[:topk]
+
+        reranked = []
+
+        for rank, track_id in enumerate(ranked_items, start=1):
+            metadata = self._metadata_for_track(track_id)
+            title = normalize_tag(metadata.get("track_name"))
+            artist_set = self._metadata_text_set(metadata.get("artist_name"))
+            album_set = self._metadata_text_set(metadata.get("album_name"))
+            tag_set = set(normalized_music_tags(metadata.get("tag_list"), max_tags=80))
+            tag_set.update(metadata.get("artist_style_profile", []))
+            decade = normalize_tag(metadata.get("release_decade") or release_decade_text(metadata.get("release_date")))
+
+            score = self.query_type_rank_weight / rank
+
+            if "title" in route_types and any(self._contains_phrase(title, title_query) for title_query in features["titles"]):
+                score += self.query_type_title_weight
+            if "artist" in route_types and features["artists"] & artist_set:
+                score += self.query_type_artist_weight
+            if "same_artist" in route_types and features["previous_artists"] & artist_set:
+                score += self.query_type_artist_weight
+            if "album" in route_types and features["albums"] & album_set:
+                score += self.query_type_album_weight
+            if "decade" in route_types and features["decades"] and decade in features["decades"]:
+                score += self.query_type_decade_weight
+
+            if "negative" in route_types and features["avoid"] & (artist_set | album_set | tag_set):
+                score -= self.query_type_negative_weight
+
+            reranked.append((track_id, score, rank))
+
+        reranked.sort(key=lambda item: (-item[1], item[2], item[0]))
+        return [track_id for track_id, _, _ in reranked[:topk]]
 
     def _max_similarity_structured_rerank(
         self,
@@ -638,7 +820,9 @@ class CRS_BASELINE:
                     retrieval_input = (
                         conversation_text
                         + "\n\nGemini-controlled BM25 search terms:\n"
-                        + gemini_query
+                        + "\n\n".join(
+                            [gemini_query] * max(1, self.gemini_keyword_block_weight)
+                        )
                     )
                 except Exception as e:
                     print(f"Gemini expansion failed, using original query. Error: {e}")
@@ -653,6 +837,7 @@ class CRS_BASELINE:
 
         # Stage 1: Batch retrieval
         batch_retrieval_items = [None] * len(retrieval_requests)
+        retrieval_topk = self.query_type_candidate_topk if self.use_query_type_routing else 20
         text_request_indices = [
             i for i, request in enumerate(retrieval_requests)
             if isinstance(request, str)
@@ -661,20 +846,36 @@ class CRS_BASELINE:
 
         if text_requests:
             if hasattr(self.retrieval, 'batch_text_to_item_retrieval'):
-                text_retrieval_items = self.retrieval.batch_text_to_item_retrieval(text_requests, topk=20)
+                text_retrieval_items = self.retrieval.batch_text_to_item_retrieval(text_requests, topk=retrieval_topk)
             else:
                 # Fallback to sequential retrieval if batch method not available
                 text_retrieval_items = [
-                    self.retrieval.text_to_item_retrieval(inp, topk=20)
+                    self.retrieval.text_to_item_retrieval(inp, topk=retrieval_topk)
                     for inp in text_requests
                 ]
 
             for request_index, retrieval_items in zip(text_request_indices, text_retrieval_items):
-                batch_retrieval_items[request_index] = retrieval_items
+                if self.use_query_type_routing:
+                    batch_retrieval_items[request_index] = self._query_type_route_rerank(
+                        retrieval_items,
+                        session_memories[request_index],
+                        retrieval_requests[request_index],
+                        topk=20,
+                    )
+                else:
+                    batch_retrieval_items[request_index] = retrieval_items
 
         for i, request in enumerate(retrieval_requests):
             if not isinstance(request, str):
-                batch_retrieval_items[i] = request
+                if self.use_query_type_routing:
+                    batch_retrieval_items[i] = self._query_type_route_rerank(
+                        request,
+                        session_memories[i],
+                        "",
+                        topk=20,
+                    )
+                else:
+                    batch_retrieval_items[i] = request
 
         recommend_items = [
             None if self.retrieval_only else self.item_db.id_to_metadata(items[0])

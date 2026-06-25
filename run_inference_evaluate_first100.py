@@ -121,6 +121,8 @@ def load_model(
             "gemini-3.1-flash-lite-preview",
         ),
         gemini_cache_dir=gemini_cache_dir,
+        gemini_keyword_field_weights=config.get("gemini_keyword_field_weights", None),
+        gemini_keyword_block_weight=config.get("gemini_keyword_block_weight", 1),
         gemini_expansion_mode=config.get("gemini_expansion_mode", "tag_query"),
         gemini_topk_per_reference=config.get("gemini_topk_per_reference", 50),
         gemini_rrf_k=config.get("gemini_rrf_k", 60),
@@ -141,6 +143,14 @@ def load_model(
         hybrid_artist_match_weight=config.get("hybrid_artist_match_weight", 0.03),
         hybrid_album_match_weight=config.get("hybrid_album_match_weight", 0.02),
         hybrid_multi_source_weight=config.get("hybrid_multi_source_weight", 0.03),
+        use_query_type_routing=config.get("use_query_type_routing", False),
+        query_type_candidate_topk=config.get("query_type_candidate_topk", 100),
+        query_type_rank_weight=config.get("query_type_rank_weight", 1.0),
+        query_type_title_weight=config.get("query_type_title_weight", 0.80),
+        query_type_artist_weight=config.get("query_type_artist_weight", 0.55),
+        query_type_album_weight=config.get("query_type_album_weight", 0.35),
+        query_type_decade_weight=config.get("query_type_decade_weight", 0.18),
+        query_type_negative_weight=config.get("query_type_negative_weight", 0.35),
         retrieval_only=config.get("retrieval_only", False),
     )
 

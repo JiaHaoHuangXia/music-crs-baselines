@@ -14,6 +14,7 @@ CSV_PATH = ROOT / "visualize_streamlit" / "gemini_to_catalog_similarity_table.cs
 DEVSET_GEMINI_PATH = ROOT / "visualize_streamlit" / "devset_gemini_ground_truth_table.csv"
 DEVSET_CONVERSATION_PATH = ROOT / "visualize_streamlit" / "devset_conversation_details.json"
 EMBEDDING_PROJECTION_PATH = ROOT / "visualize_streamlit" / "gemini_embedding_projection.csv"
+BM25_EXPLANATION_PATH = ROOT / "visualize_streamlit" / "bm25_explanation_table.csv"
 SCORES_DIR = TFM_ROOT / "music-crs-evaluator" / "exp" / "scores" / "devset"
 PREDICTIONS_DIR = TFM_ROOT / "music-crs-evaluator" / "exp" / "inference" / "devset"
 
@@ -124,6 +125,32 @@ MANUAL_RESULTS = [
 ]
 
 DEVSET_SUBSET_RESULTS = [
+    {
+        "experiment": "BM25 + Gemini controlled keywords + query-type router",
+        "split": "Devset first 50 conversations",
+        "turns_evaluated": 400,
+        "ndcg@1": 0.0325,
+        "ndcg@10": 0.11541612893572054,
+        "ndcg@20": 0.15073852033934126,
+        "catalog_diversity": 0.054407172144207684,
+        "lexical_diversity": 0.0,
+        "total_catalog_size": 47071,
+        "source": "Local evaluator",
+        "note": "Best local first-50 run. Gemini extracts controlled BM25 terms, then a conservative query-type router reranks only clear artist/title/album/decade/negative-intent turns.",
+    },
+    {
+        "experiment": "BM25 + Gemini controlled keywords, artist/title weighted block x2",
+        "split": "Devset first 50 conversations",
+        "turns_evaluated": 400,
+        "ndcg@1": 0.0325,
+        "ndcg@10": 0.11414415511650364,
+        "ndcg@20": 0.14930209229441888,
+        "catalog_diversity": 0.05126298570244949,
+        "lexical_diversity": 0.5262852351157841,
+        "total_catalog_size": 47071,
+        "source": "Local evaluator",
+        "note": "Previous best local BM25 run. The final query repeats Gemini controlled keywords twice and gives artist/title fields higher weight.",
+    },
     {
         "experiment": "MiniLM + artist profile + decade + BM25 hybrid reranker",
         "split": "Devset first 50 conversations",
@@ -511,6 +538,32 @@ def load_embedding_projection(path):
         ranks = pd.to_numeric(df["retrieved_rank"], errors="coerce").astype("Int64")
         df["retrieved_rank_key"] = ranks.astype(str).replace("<NA>", "")
 
+    return df
+
+
+@st.cache_data
+def load_bm25_explanations(path):
+    if not path.exists():
+        return pd.DataFrame()
+
+    df = pd.read_csv(path)
+    text_columns = [
+        column
+        for column in df.columns
+        if pd.api.types.is_object_dtype(df[column])
+        or pd.api.types.is_string_dtype(df[column])
+    ]
+    for column in text_columns:
+        df[column] = df[column].map(clean_text)
+
+    df["turn_number"] = pd.to_numeric(df["turn_number"], errors="coerce").astype("Int64")
+    df["rank"] = pd.to_numeric(df["rank"], errors="coerce").astype("Int64")
+    df["matched_term_count"] = pd.to_numeric(
+        df["matched_term_count"],
+        errors="coerce",
+    ).fillna(0)
+    if "is_ground_truth" in df.columns:
+        df["is_ground_truth"] = df["is_ground_truth"].astype(str).str.lower().isin(["true", "1"])
     return df
 
 
@@ -1006,7 +1059,10 @@ def render_devset_conversation(detail):
     response_col, ranking_col = st.columns([1.15, 1])
     with response_col:
         st.markdown("##### Generated Response")
-        st.write(detail["predicted_response"])
+        if str(detail.get("predicted_response", "")).strip():
+            st.write(detail["predicted_response"])
+        else:
+            st.info("This artifact was generated from a retrieval-only run, so no Llama response was saved.")
 
     with ranking_col:
         st.markdown("##### Ranked Tracks")
@@ -1160,6 +1216,190 @@ def render_devset_comparison(df, conversation_details):
     )
     st.plotly_chart(global_fig, width="stretch")
     st.dataframe(per_reference, width="stretch", hide_index=True)
+
+
+def parse_keyword_json(value):
+    try:
+        payload = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def split_terms(value):
+    return [term.strip() for term in str(value or "").split(",") if term.strip()]
+
+
+def render_bm25_explanation(df, conversation_details):
+    render_header(
+        "BM25 Explanation",
+        "Inspect the lexical evidence behind BM25 retrieval and the query-type router.",
+    )
+    if df.empty:
+        st.warning("BM25 explanation data was not found.")
+        st.code(
+            "python refresh_streamlit_artifacts.py --run_dir exp/first_100/devset_bm25_gemini_keywords_query_type_router "
+            "--gemini_cache_dir cache/gemini_keywords_devset_first100 --projection_retrieval_type sentence_transformer "
+            "--corpus_types track_name artist_name album_name --topk_retrieved_per_reference 20",
+            language="powershell",
+        )
+        return
+
+    st.markdown(
+        """
+        **How to read this page.** BM25 is not an embedding model, so the useful visualization is not a 2D semantic map.
+        This view explains the lexical matching process: Gemini extracts controlled search terms, BM25 retrieves
+        catalog tracks whose metadata contains those terms, and the query-type router only changes the order for
+        clear artist/title/album/decade/negative-intent cases.
+        """
+    )
+
+    turn_count = df[["session_id", "turn_number"]].drop_duplicates().shape[0]
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Explanation rows", len(df))
+    col2.metric("Evaluated turns", turn_count)
+    col3.metric("Avg matched terms", format_metric(df["matched_term_count"].mean(), digits=2))
+    col4.metric("Ground-truth rows", int(df["is_ground_truth"].sum()))
+
+    session_options = sorted(df["session_id"].dropna().unique())
+    selected_session = st.sidebar.selectbox(
+        "Session",
+        session_options,
+        key="bm25_session",
+    )
+    session_df = df[df["session_id"] == selected_session].copy()
+    turn_options = sorted(session_df["turn_number"].dropna().unique(), key=int)
+    selected_turn = st.sidebar.selectbox(
+        "Turn",
+        turn_options,
+        key="bm25_turn",
+    )
+    turn_df = session_df[session_df["turn_number"] == selected_turn].sort_values("rank").copy()
+    if turn_df.empty:
+        st.info("No BM25 explanation rows are available for this turn.")
+        return
+
+    detail = conversation_details.get((selected_session, int(selected_turn)))
+    render_devset_conversation(detail)
+
+    first_row = turn_df.iloc[0]
+    keyword_payload = parse_keyword_json(first_row.get("keyword_json", "{}"))
+    route_types = first_row.get("route_types", "none")
+
+    st.markdown("#### Controlled Query")
+    left, right = st.columns([1, 1])
+    with left:
+        st.markdown("##### Gemini Extracted Fields")
+        keyword_rows = [
+            {"field": field, "values": ", ".join(values) if isinstance(values, list) else ""}
+            for field, values in keyword_payload.items()
+        ]
+        st.dataframe(pd.DataFrame(keyword_rows), width="stretch", hide_index=True, height=300)
+    with right:
+        st.markdown("##### Final BM25 Query Text")
+        st.code(first_row.get("final_bm25_query", ""), language="text")
+        st.metric("Router route", route_types)
+
+    st.markdown("#### Top-20 Retrieval Evidence")
+    display_table = turn_df[
+        [
+            "rank",
+            "track_name",
+            "artist_name",
+            "album_name",
+            "release_decade",
+            "matched_term_count",
+            "matched_fields",
+            "matched_terms",
+            "is_ground_truth",
+        ]
+    ].rename(
+        columns={
+            "track_name": "track",
+            "artist_name": "artist",
+            "album_name": "album",
+            "release_decade": "decade",
+            "matched_term_count": "matched_terms_n",
+            "is_ground_truth": "ground_truth",
+        }
+    )
+    st.dataframe(display_table, width="stretch", hide_index=True, height=420)
+
+    st.markdown("#### Matched-Term Heatmap")
+    selected_terms = []
+    for field in [
+        "track_titles",
+        "artists",
+        "albums",
+        "genres",
+        "moods",
+        "instruments",
+        "themes",
+        "era",
+        "must_include_terms",
+        "avoid_terms",
+    ]:
+        values = keyword_payload.get(field, [])
+        if isinstance(values, list):
+            selected_terms.extend(str(value).strip().lower() for value in values if str(value).strip())
+    selected_terms = list(dict.fromkeys(selected_terms))[:24]
+
+    if not selected_terms:
+        st.info("No Gemini keyword terms were exported for this turn.")
+    else:
+        heatmap_rows = []
+        for row in turn_df.itertuples(index=False):
+            matched = {term.lower() for term in split_terms(row.matched_terms)}
+            label = f"{int(row.rank)}. {row.track_name} - {row.artist_name}"
+            for term in selected_terms:
+                heatmap_rows.append(
+                    {
+                        "retrieved_track": label,
+                        "query_term": term,
+                        "matched": 1 if term in matched else 0,
+                    }
+                )
+        heatmap_df = pd.DataFrame(heatmap_rows)
+        fig = px.imshow(
+            heatmap_df.pivot_table(
+                index="retrieved_track",
+                columns="query_term",
+                values="matched",
+                fill_value=0,
+            ),
+            color_continuous_scale=["#f2f2f2", "#c4462f"],
+            aspect="auto",
+            labels=dict(x="Gemini/BM25 query term", y="Retrieved track", color="Matched"),
+        )
+        fig.update_layout(height=620)
+        st.plotly_chart(fig, width="stretch")
+
+    st.markdown("#### Field Match Breakdown")
+    field_columns = [
+        "track_name_matches",
+        "artist_name_matches",
+        "album_name_matches",
+        "tag_list_matches",
+        "release_decade_matches",
+    ]
+    field_summary = []
+    for column in field_columns:
+        field_summary.append(
+            {
+                "field": column.replace("_matches", ""),
+                "tracks_with_match": int(turn_df[column].fillna("").astype(str).str.len().gt(0).sum()),
+                "all_matched_terms": ", ".join(
+                    sorted(
+                        {
+                            term
+                            for value in turn_df[column].fillna("")
+                            for term in split_terms(value)
+                        }
+                    )
+                ),
+            }
+        )
+    st.dataframe(pd.DataFrame(field_summary), width="stretch", hide_index=True)
 
 
 def build_oracle_rows(ground_truth_df, retrieved_df, k_values):
@@ -1972,6 +2212,7 @@ def main():
     devset_gemini_df = load_devset_ground_truth_table(DEVSET_GEMINI_PATH)
     devset_conversations = load_devset_conversations(DEVSET_CONVERSATION_PATH)
     embedding_projection_df = load_embedding_projection(EMBEDDING_PROJECTION_PATH)
+    bm25_explanation_df = load_bm25_explanations(BM25_EXPLANATION_PATH)
 
     if "active_page" not in st.session_state:
         st.session_state.active_page = "Project Overview"
@@ -2007,6 +2248,13 @@ def main():
             args=("Devset Embedding Map",),
         )
         st.button(
+            "BM25 Explanation",
+            width="stretch",
+            type="primary" if st.session_state.active_page == "BM25 Explanation" else "secondary",
+            on_click=set_active_page,
+            args=("BM25 Explanation",),
+        )
+        st.button(
             "Blindset Retrieval Explorer",
             width="stretch",
             type="primary" if st.session_state.active_page == "Blindset Retrieval Explorer" else "secondary",
@@ -2024,6 +2272,8 @@ def main():
             st.caption("Inspect conversations with known target tracks.")
         elif page == "Devset Embedding Map":
             st.caption("See Gemini references and target tracks inside the BERT embedding space.")
+        elif page == "BM25 Explanation":
+            st.caption("Inspect controlled BM25 query terms, matches, and router evidence.")
         else:
             st.caption("Explore Gemini references against nearby catalog tracks.")
 
@@ -2039,6 +2289,8 @@ def main():
         render_devset_comparison(devset_gemini_df, devset_conversations)
     elif page == "Devset Embedding Map":
         render_embedding_map(embedding_projection_df, devset_conversations)
+    elif page == "BM25 Explanation":
+        render_bm25_explanation(bm25_explanation_df, devset_conversations)
     else:
         render_model_results()
 

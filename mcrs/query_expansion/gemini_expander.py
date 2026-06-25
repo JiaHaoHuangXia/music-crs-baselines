@@ -12,12 +12,24 @@ class GeminiExpander:
         self,
         model_name="gemini-3.1-flash-lite-preview",
         cache_dir="./cache/gemini_expansions",
+        keyword_field_weights=None,
         sleep_seconds=4.5,
         max_retries=5,
     ):
         self.model_name = model_name
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.keyword_field_weights = keyword_field_weights or {
+            "track_titles": 4,
+            "artists": 4,
+            "albums": 3,
+            "genres": 2,
+            "moods": 2,
+            "instruments": 2,
+            "themes": 2,
+            "era": 2,
+            "must_include_terms": 3,
+        }
         self.sleep_seconds = sleep_seconds
         self.max_retries = max_retries
 
@@ -256,19 +268,7 @@ Conversation:
         payload = self._normalize_keyword_payload(payload)
 
         weighted_parts = []
-        field_weights = {
-            "track_titles": 4,
-            "artists": 4,
-            "albums": 3,
-            "genres": 2,
-            "moods": 2,
-            "instruments": 2,
-            "themes": 2,
-            "era": 2,
-            "must_include_terms": 3,
-        }
-
-        for field, weight in field_weights.items():
+        for field, weight in self.keyword_field_weights.items():
             values = payload.get(field, [])
             if not values:
                 continue

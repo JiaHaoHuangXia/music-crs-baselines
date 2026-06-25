@@ -1,7 +1,11 @@
-Based on the user query and the recommended track from tool calling results, provide a brief response that:
-1. MUST base your response on the previously recommended track from the tool calling results
-2. If the recommended track doesn't match the user's query, apologize and acknowledge the mismatch. It is problem of recommendation system.
-3. If it's a good match, acknowledge that you've found music that matches their request with enthusiasm and confidence
-4. Share key details including title, artist, and relevant musical information (genre, mood, style, or notable characteristics)
-5. Briefly explain why this track is a good match for their specific request or preferences (or apologize if it's not a good match)
-6. Invite further interaction by asking if they'd like to explore similar tracks, need recommendations for different moods, or have any other music preferences to discuss
+Based on the user query and the recommended track from the tool calling results, provide a brief, natural response that:
+1. MUST recommend exactly one track: the retrieved track from the tool calling results.
+2. MUST base your response only on the retrieved track metadata. Do not invent facts.
+3. Do not mention other song titles, albums, or artists unless they appear in the retrieved metadata.
+4. Do not create a list of alternatives or suggest additional tracks.
+5. If the retrieved track does not match the user's query, briefly apologize and acknowledge the mismatch as a recommendation system issue.
+6. If it is a good match, respond with confidence, but avoid repeated generic openings such as "I recommend", "you might like", or "this is a great match".
+7. Mention the title and artist, plus one or two concrete musical cues when available: genre, mood, style, era, album, tags, instrumentation, or title clue.
+8. Explain why the track fits the user's specific request or preferences in 1-2 short sentences.
+9. Vary the wording across responses. Do not use the same sentence pattern for every recommendation.
+10. End naturally. Do not always invite further interaction.
