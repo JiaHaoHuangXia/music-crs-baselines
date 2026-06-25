@@ -152,6 +152,32 @@ DEVSET_SUBSET_RESULTS = [
         "note": "Previous best local BM25 run. The final query repeats Gemini controlled keywords twice and gives artist/title fields higher weight.",
     },
     {
+        "experiment": "Clean baseline BM25 + tag_list + raw conversation",
+        "split": "Devset first 50 conversations",
+        "turns_evaluated": 400,
+        "ndcg@1": 0.0175,
+        "ndcg@10": 0.09162452088491813,
+        "ndcg@20": 0.12487742965820994,
+        "catalog_diversity": 0.048926090374115695,
+        "lexical_diversity": 0.49106931629997636,
+        "total_catalog_size": 47071,
+        "source": "Local evaluator, baseline-models-first50 branch",
+        "note": "Upstream baseline code on the first 50 devset conversations, using raw conversation text and catalog fields track, artist, album, tag_list, and release_date.",
+    },
+    {
+        "experiment": "Clean baseline BM25 + raw conversation",
+        "split": "Devset first 50 conversations",
+        "turns_evaluated": 400,
+        "ndcg@1": 0.0175,
+        "ndcg@10": 0.0936229490574533,
+        "ndcg@20": 0.12222444085071704,
+        "catalog_diversity": 0.040916912748826244,
+        "lexical_diversity": 0.4877534278682761,
+        "total_catalog_size": 47071,
+        "source": "Local evaluator, baseline-models-first50 branch",
+        "note": "Upstream baseline code on the first 50 devset conversations, using raw conversation text and catalog fields track, artist, album, and release_date.",
+    },
+    {
         "experiment": "MiniLM + artist profile + decade + BM25 hybrid reranker",
         "split": "Devset first 50 conversations",
         "turns_evaluated": 400,
@@ -189,6 +215,19 @@ DEVSET_SUBSET_RESULTS = [
         "total_catalog_size": 47071,
         "source": "Local evaluator",
         "note": "Previous first-50 devset reference run.",
+    },
+    {
+        "experiment": "Clean baseline BERT + raw conversation",
+        "split": "Devset first 50 conversations",
+        "turns_evaluated": 400,
+        "ndcg@1": 0.0025,
+        "ndcg@10": 0.011400438250866413,
+        "ndcg@20": 0.013322326781414569,
+        "catalog_diversity": 0.014467506532684667,
+        "lexical_diversity": 0.4384776745579862,
+        "total_catalog_size": 47071,
+        "source": "Local evaluator, baseline-models-first50 branch",
+        "note": "Upstream BERT baseline code on the first 50 devset conversations, using raw conversation text.",
     },
     {
         "experiment": "BERT + Gemini multi-query fusion + tag_list",
@@ -773,12 +812,12 @@ def render_model_results():
     st.markdown(
         """
         - For this challenge, the most important retrieval signal is nDCG@20: whether the exact target track appears in the top 20.
-        - The current best local devset system is the MiniLM + artist profile + decade + BM25 hybrid reranker.
-        - The biggest recent gain came from adding BM25 lexical candidates over title, artist, album, and tags before structured reranking.
-        - Gemini multi-query helps dense retrieval when fused carefully, but BM25 lexical evidence is important for exact target-track recovery.
-        - Gemini can improve natural-language response quality, but it does not consistently improve exact hidden-track retrieval.
-        - BERT variants retrieve semantically plausible neighborhoods, but they are weak for this evaluation because nDCG@20 rewards exact track recovery.
-        - The most useful thesis comparison is BM25 vs BM25 + tag_list vs BERT/Gemini variants, because it shows the difference between lexical matching and semantic query drift.
+        - The current best local devset system is BM25 with Gemini controlled keywords and a conservative query-type router.
+        - The clean upstream baseline comparison shows that BM25 is much stronger than BERT for exact target-track recovery.
+        - Adding tag_list to the clean BM25 baseline improves nDCG@20, but its noisy terms can slightly disturb top-10 ranking.
+        - The biggest gain came from using Gemini as a controlled lexical query extractor instead of a free-form similar-song generator.
+        - Dense embedding variants retrieve semantically plausible neighborhoods, but they are weak for this evaluation because nDCG@20 rewards exact track recovery.
+        - The most useful thesis comparison is clean BM25 vs clean BM25 + tag_list vs BM25 + Gemini controlled keywords, because it shows how lexical evidence improves exact retrieval.
         """
     )
 
