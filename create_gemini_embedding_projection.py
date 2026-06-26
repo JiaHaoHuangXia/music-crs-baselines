@@ -1,5 +1,5 @@
 """
-Create a UMAP map of catalog embeddings and Gemini reference embeddings.
+Create 2D maps of catalog embeddings and Gemini reference embeddings.
 
 This script is intended to be run offline after the matching retrieval embedding
 cache exists. It writes a CSV that Streamlit can load without initializing an
@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 
 # Import sklearn/umap before torch on Windows to avoid occasional DLL/import issues.
+from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize
 from umap import UMAP
 
@@ -226,7 +227,7 @@ def assign_broad_genre(tag_text: str) -> str:
 
 def build_catalog_rows(
     track_ids: list[str],
-    coords: np.ndarray,
+    coords_by_method: dict[str, np.ndarray],
     metadata: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
     rows = []
@@ -251,10 +252,11 @@ def build_catalog_rows(
                 "tag_list": tag_list,
                 "release_date": field_to_text(item.get("release_date", "")),
                 "broad_genre": assign_broad_genre(tag_list),
-                "umap_x": coords[idx, 0],
-                "umap_y": coords[idx, 1],
             }
         )
+        for method, coords in coords_by_method.items():
+            rows[-1][f"{method}_x"] = coords[idx, 0]
+            rows[-1][f"{method}_y"] = coords[idx, 1]
     return rows
 
 
@@ -342,7 +344,7 @@ def main() -> None:
         track_ids = json.load(file)
 
     catalog_embeddings = normalize(catalog_embeddings)
-    reducer = UMAP(
+    umap_reducer = UMAP(
         n_components=2,
         n_neighbors=30,
         min_dist=0.05,
@@ -350,12 +352,19 @@ def main() -> None:
         random_state=RANDOM_SEED,
         transform_seed=RANDOM_SEED,
     )
-    catalog_coords = reducer.fit_transform(catalog_embeddings)
+    catalog_umap_coords = umap_reducer.fit_transform(catalog_embeddings)
+
+    pca_reducer = PCA(n_components=2, random_state=RANDOM_SEED)
+    catalog_pca_coords = pca_reducer.fit_transform(catalog_embeddings)
 
     metadata = load_catalog_metadata()
-    catalog_rows = build_catalog_rows(track_ids, catalog_coords, metadata)
+    catalog_rows = build_catalog_rows(
+        track_ids,
+        {"pca": catalog_pca_coords, "umap": catalog_umap_coords},
+        metadata,
+    )
     for row in catalog_rows:
-        row["projection_method"] = "umap"
+        row["projection_method"] = "pca+umap"
         row["projection_retrieval_type"] = args.projection_retrieval_type
         row["projection_corpus_types"] = ", ".join(args.corpus_types)
     catalog_rows_by_id = {row["track_id"]: row for row in catalog_rows}
@@ -383,7 +392,7 @@ def main() -> None:
             gemini_rows.append(
                 {
                     "point_type": "gemini_reference",
-                    "projection_method": "umap",
+                    "projection_method": "pca+umap",
                     "projection_retrieval_type": args.projection_retrieval_type,
                     "projection_corpus_types": ", ".join(args.corpus_types),
                     "session_id": session_id,
@@ -412,10 +421,13 @@ def main() -> None:
             batch_size=args.batch_size,
         )
         gemini_embeddings = normalize(gemini_embeddings)
-        gemini_coords = reducer.transform(gemini_embeddings)
+        gemini_umap_coords = umap_reducer.transform(gemini_embeddings)
+        gemini_pca_coords = pca_reducer.transform(gemini_embeddings)
         for idx, row in enumerate(gemini_rows):
-            row["umap_x"] = gemini_coords[idx, 0]
-            row["umap_y"] = gemini_coords[idx, 1]
+            row["pca_x"] = gemini_pca_coords[idx, 0]
+            row["pca_y"] = gemini_pca_coords[idx, 1]
+            row["umap_x"] = gemini_umap_coords[idx, 0]
+            row["umap_y"] = gemini_umap_coords[idx, 1]
 
         similarities = np.matmul(gemini_embeddings, catalog_embeddings.T)
         topk = min(args.topk_retrieved_per_reference, similarities.shape[1])
@@ -439,7 +451,7 @@ def main() -> None:
     pd.DataFrame(output_rows).to_csv(output_path, index=False, encoding="utf-8")
 
     print(f"Saved {len(output_rows)} points to {output_path}")
-    print("Projection method: UMAP")
+    print("Projection methods: PCA and UMAP")
     print(f"Projection retrieval type: {args.projection_retrieval_type}")
     print(f"Corpus fields: {args.corpus_types}")
 

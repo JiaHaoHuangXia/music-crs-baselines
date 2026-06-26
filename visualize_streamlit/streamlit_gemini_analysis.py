@@ -1636,13 +1636,13 @@ def render_embedding_map(df, conversation_details):
     st.markdown(
         """
         **How to read this page.** The gray cloud is the real challenge catalog projected from retrieval embeddings
-        into two UMAP dimensions. The highlighted points show the selected turn's ground-truth track and the five
-        Gemini-generated reference tracks. If the Gemini points are far from the ground truth, that is visual evidence
-        of query drift.
+        into two dimensions. The highlighted points show the selected turn's ground-truth track and the five
+        Gemini-generated reference tracks. If the Gemini points are far from the ground truth, that can indicate
+        query drift, but the actual retrieval decision is still made in the original embedding space.
 
-        UMAP is used because this page focuses on local neighborhoods: whether Gemini references, retrieved tracks,
-        final recommendations, and ground-truth tracks appear near each other. Retrieval is still computed in the
-        original embedding space, not directly from this 2D map.
+        PCA is the recommended view for thesis explanation because it is more stable and preserves broad global
+        structure. UMAP is available as an exploratory local-neighborhood view, but it can exaggerate or compress
+        distances in ways that are visually misleading.
 
         The final top-20 recommendations, Gemini references, and embedding projection are loaded from exported
         dashboard files. After running a new model, refresh those files with `refresh_streamlit_artifacts.py`
@@ -1679,13 +1679,27 @@ def render_embedding_map(df, conversation_details):
         "bert": "BERT",
         "sentence_transformer": "MiniLM sentence-transformer",
     }.get(projection_type, projection_type)
-    projection_method = (
-        df["projection_method"].dropna().astype(str).iloc[0]
-        if "projection_method" in df.columns and not df["projection_method"].dropna().empty
-        else "umap" if {"umap_x", "umap_y"}.issubset(df.columns) else "pca"
+    available_projection_methods = []
+    if {"pca_x", "pca_y"}.issubset(df.columns):
+        available_projection_methods.append("pca")
+    if {"umap_x", "umap_y"}.issubset(df.columns):
+        available_projection_methods.append("umap")
+    if not available_projection_methods:
+        st.warning("The projection CSV does not contain usable 2D coordinates.")
+        return
+    default_projection_index = 0
+    projection_method = st.sidebar.selectbox(
+        "Map projection",
+        available_projection_methods,
+        index=default_projection_index,
+        format_func=lambda value: {
+            "pca": "PCA - stable thesis view",
+            "umap": "UMAP - exploratory local view",
+        }.get(value, value.upper()),
+        key="embedding_projection_method",
     )
-    x_coord = "umap_x" if "umap_x" in df.columns else "pca_x"
-    y_coord = "umap_y" if "umap_y" in df.columns else "pca_y"
+    x_coord = f"{projection_method}_x"
+    y_coord = f"{projection_method}_y"
     projection_method_label = projection_method.upper()
     st.caption(
         f"Projection: {projection_method_label} using {projection_label}. Corpus fields: {projection_fields}."
