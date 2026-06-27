@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import torch
@@ -38,14 +39,13 @@ class CRS_BASELINE:
         retrieval_type="bm25",
         item_db_name: str = "talkpl-ai/TalkPlayData-Challenge-Track-Metadata",
         user_db_name: str = "talkpl-ai/TalkPlayData-Challenge-User-Metadata",
-        track_split_types: list[str] = ["all_tracks"], # for test
+        track_split_types: list[str] = ["all_tracks"],
         user_split_types: list[str] = ["all_users"],
         corpus_types: list[str] = ["track_name", "artist_name", "album_name"],
         cache_dir="./cache",
         device="cuda",
         attn_implementation="eager",
         dtype=torch.bfloat16,
-        # New Gemini parameters
         use_gemini_expansion: bool = False,
         gemini_model_name: str = "gemini-3.1-flash-lite",
         gemini_cache_dir: str = "./cache/gemini_expansions",
@@ -76,6 +76,7 @@ class CRS_BASELINE:
         query_type_album_weight: float = 0.35,
         query_type_decade_weight: float = 0.18,
         query_type_negative_weight: float = 0.35,
+        learned_query_type_weights_path: Optional[str] = None,
         retrieval_only: bool = False,
     ):
         """Initialize the CRS baseline components.
@@ -104,7 +105,6 @@ class CRS_BASELINE:
         self.attn_implementation = attn_implementation
         self.retrieval_only = retrieval_only
 
-        # Gemini query expansion
         self.use_gemini_expansion = use_gemini_expansion
         self.gemini_keyword_field_weights = gemini_keyword_field_weights
         self.gemini_keyword_block_weight = gemini_keyword_block_weight
@@ -138,6 +138,10 @@ class CRS_BASELINE:
         self.query_type_album_weight = query_type_album_weight
         self.query_type_decade_weight = query_type_decade_weight
         self.query_type_negative_weight = query_type_negative_weight
+        self.learned_query_type_weights_path = learned_query_type_weights_path
+        self.learned_query_type_weights = self._load_learned_query_type_weights(
+            learned_query_type_weights_path
+        )
         valid_gemini_modes = {
             "tag_query",
             "multi_query_fusion",
@@ -267,18 +271,21 @@ class CRS_BASELINE:
         return ranked_track_ids[:topk]
 
     def _metadata_for_track(self, track_id: str) -> dict[str, Any]:
+        """Return catalog metadata for a retrieved track ID."""
         if hasattr(self.retrieval, "metadata_dict") and track_id in self.retrieval.metadata_dict:
             return self.retrieval.metadata_dict[track_id]
         return self.item_db.metadata_dict[track_id]
 
     @staticmethod
     def _overlap_score(left: set[str], right: set[str]) -> float:
+        """Measure how much of one normalized term set appears in another."""
         if not left or not right:
             return 0.0
         return len(left & right) / len(left)
 
     @staticmethod
     def _metadata_text_set(value: Any) -> set[str]:
+        """Normalize a metadata field into a set of comparable text values."""
         if value is None:
             return set()
         if isinstance(value, list):
@@ -289,6 +296,7 @@ class CRS_BASELINE:
 
     @staticmethod
     def _field_values_from_text(text: str, field: str) -> list[str]:
+        """Extract one Gemini structured-keyword field from the retrieval text."""
         pattern = re.compile(rf"{re.escape(field)}:\s*([^\n]+)", re.IGNORECASE)
         values = []
         for match in pattern.finditer(text or ""):
@@ -297,12 +305,14 @@ class CRS_BASELINE:
 
     @staticmethod
     def _contains_phrase(text: str, phrase: str) -> bool:
+        """Check phrase matches with word boundaries after music-text normalization."""
         phrase = normalize_tag(phrase)
         if not phrase:
             return False
         return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", normalize_tag(text)) is not None
 
     def _metadata_from_history_message(self, message: dict[str, Any]) -> Optional[dict[str, Any]]:
+        """Recover the metadata of a previously recommended track from chat history."""
         content = str(message.get("content", ""))
         match = re.search(r"track_id:\s*([^,\n]+)", content, re.IGNORECASE)
         if not match:
@@ -310,11 +320,38 @@ class CRS_BASELINE:
         track_id = match.group(1).strip()
         return self.item_db.metadata_dict.get(track_id)
 
+    def _load_learned_query_type_weights(
+        self,
+        weights_path: Optional[str],
+    ) -> Optional[dict[str, Any]]:
+        """Load optional logistic-regression coefficients for query-type reranking."""
+        if not weights_path:
+            return None
+        with open(weights_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        if "weights" not in payload:
+            raise ValueError(f"Learned query-type weights file has no 'weights': {weights_path}")
+        return payload
+
+    @staticmethod
+    def query_type_feature_names() -> list[str]:
+        """Return the fixed feature order used by training and inference."""
+        return [
+            "reciprocal_rank",
+            "title_match",
+            "artist_match",
+            "same_artist_match",
+            "album_match",
+            "decade_match",
+            "negative_match",
+        ]
+
     def _query_type_features(
         self,
         session_memory: list[dict[str, Any]],
         retrieval_input: str,
     ) -> dict[str, Any]:
+        """Detect which structured query signals are active for the current turn."""
         current_query = str(session_memory[-1].get("content", "")) if session_memory else ""
         current_query_norm = normalize_tag(current_query)
         previous_metadata = [
@@ -403,6 +440,65 @@ class CRS_BASELINE:
             "previous_artists": previous_artists,
         }
 
+    def query_type_candidate_features(
+        self,
+        track_id: str,
+        rank: int,
+        query_features: dict[str, Any],
+    ) -> dict[str, float]:
+        """Build interpretable candidate features for static or learned reranking."""
+        metadata = self._metadata_for_track(track_id)
+        title = normalize_tag(metadata.get("track_name"))
+        artist_set = self._metadata_text_set(metadata.get("artist_name"))
+        album_set = self._metadata_text_set(metadata.get("album_name"))
+        tag_set = set(normalized_music_tags(metadata.get("tag_list"), max_tags=80))
+        tag_set.update(metadata.get("artist_style_profile", []))
+        decade = normalize_tag(metadata.get("release_decade") or release_decade_text(metadata.get("release_date")))
+        route_types = query_features["route_types"]
+
+        return {
+            "reciprocal_rank": 1.0 / max(rank, 1),
+            "title_match": float(
+                "title" in route_types
+                and any(
+                    self._contains_phrase(title, title_query)
+                    for title_query in query_features["titles"]
+                )
+            ),
+            "artist_match": float(
+                "artist" in route_types
+                and bool(query_features["artists"] & artist_set)
+            ),
+            "same_artist_match": float(
+                "same_artist" in route_types
+                and bool(query_features["previous_artists"] & artist_set)
+            ),
+            "album_match": float(
+                "album" in route_types
+                and bool(query_features["albums"] & album_set)
+            ),
+            "decade_match": float(
+                "decade" in route_types
+                and bool(query_features["decades"])
+                and decade in query_features["decades"]
+            ),
+            "negative_match": float(
+                "negative" in route_types
+                and bool(query_features["avoid"] & (artist_set | album_set | tag_set))
+            ),
+        }
+
+    def _learned_query_type_score(self, feature_values: dict[str, float]) -> float:
+        """Score one candidate using learned logistic-regression reranker weights."""
+        payload = self.learned_query_type_weights
+        if payload is None:
+            raise ValueError("No learned query-type weights loaded.")
+        score = float(payload.get("intercept", 0.0))
+        weights = payload["weights"]
+        for name in self.query_type_feature_names():
+            score += float(weights.get(name, 0.0)) * feature_values.get(name, 0.0)
+        return score
+
     def _query_type_route_rerank(
         self,
         ranked_items: list[str],
@@ -410,6 +506,7 @@ class CRS_BASELINE:
         retrieval_input: str,
         topk: int = 20,
     ) -> list[str]:
+        """Rerank BM25 candidates with either manual or learned query-type weights."""
         features = self._query_type_features(session_memory, retrieval_input)
         route_types = features["route_types"]
         if not route_types:
@@ -418,29 +515,17 @@ class CRS_BASELINE:
         reranked = []
 
         for rank, track_id in enumerate(ranked_items, start=1):
-            metadata = self._metadata_for_track(track_id)
-            title = normalize_tag(metadata.get("track_name"))
-            artist_set = self._metadata_text_set(metadata.get("artist_name"))
-            album_set = self._metadata_text_set(metadata.get("album_name"))
-            tag_set = set(normalized_music_tags(metadata.get("tag_list"), max_tags=80))
-            tag_set.update(metadata.get("artist_style_profile", []))
-            decade = normalize_tag(metadata.get("release_decade") or release_decade_text(metadata.get("release_date")))
-
-            score = self.query_type_rank_weight / rank
-
-            if "title" in route_types and any(self._contains_phrase(title, title_query) for title_query in features["titles"]):
-                score += self.query_type_title_weight
-            if "artist" in route_types and features["artists"] & artist_set:
-                score += self.query_type_artist_weight
-            if "same_artist" in route_types and features["previous_artists"] & artist_set:
-                score += self.query_type_artist_weight
-            if "album" in route_types and features["albums"] & album_set:
-                score += self.query_type_album_weight
-            if "decade" in route_types and features["decades"] and decade in features["decades"]:
-                score += self.query_type_decade_weight
-
-            if "negative" in route_types and features["avoid"] & (artist_set | album_set | tag_set):
-                score -= self.query_type_negative_weight
+            candidate_features = self.query_type_candidate_features(track_id, rank, features)
+            if self.learned_query_type_weights is not None:
+                score = self._learned_query_type_score(candidate_features)
+            else:
+                score = self.query_type_rank_weight * candidate_features["reciprocal_rank"]
+                score += self.query_type_title_weight * candidate_features["title_match"]
+                score += self.query_type_artist_weight * candidate_features["artist_match"]
+                score += self.query_type_artist_weight * candidate_features["same_artist_match"]
+                score += self.query_type_album_weight * candidate_features["album_match"]
+                score += self.query_type_decade_weight * candidate_features["decade_match"]
+                score -= self.query_type_negative_weight * candidate_features["negative_match"]
 
             reranked.append((track_id, score, rank))
 
@@ -745,24 +830,10 @@ class CRS_BASELINE:
                 - recommend_item: Metadata for the top recommended item.
                 - response: The generated assistant response string.
         """
-        # Prepare batch inputs
         sys_prompts = []
         retrieval_requests = []
         session_memories = []
 
-        # Original version
-        # for data in batch_data:
-        #     user_query = data['user_query']
-        #     user_id = data.get('user_id')
-        #     session_memory = data['session_memory'].copy()
-        #     session_memory.append({"role": "user", "content": user_query})
-
-        #     sys_prompts.append(self._get_system_prompt(user_id))
-        #     retrieval_input = "\n".join([f"{conversation['role']}: {conversation['content']}" for conversation in session_memory])
-        #     retrieval_inputs.append(retrieval_input)
-        #     session_memories.append(session_memory)
-
-        # Gemini expansion version
         for data in batch_data:
             user_query = data['user_query']
             user_id = data.get('user_id')
@@ -771,9 +842,6 @@ class CRS_BASELINE:
 
             if not self.retrieval_only:
                 sys_prompts.append(self._get_system_prompt(user_id))
-            # Baseline retrieval method 
-            # retrieval_input = "\n".join([f"{conversation['role']}: {conversation['content']}" for conversation in session_memory])
-            # retrieval_inputs.append(retrieval_input)
             conversation_text = "\n".join([
                 f"{conversation['role']}: {conversation['content']}"
                 for conversation in session_memory

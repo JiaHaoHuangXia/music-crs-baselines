@@ -12,8 +12,9 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parents[1]
 TFM_ROOT = ROOT.parent
 DEVSET_CONVERSATION_PATH = ROOT / "visualize_streamlit" / "devset_conversation_details.json"
-EMBEDDING_PROJECTION_PATH = ROOT / "visualize_streamlit" / "gemini_embedding_projection.csv"
 BM25_EXPLANATION_PATH = ROOT / "visualize_streamlit" / "bm25_explanation_table.csv"
+MINILM_EXPLANATION_PATH = ROOT / "visualize_streamlit" / "minilm_reference_retrieval_table.csv"
+MINILM_SCORES_PATH = ROOT / "exp" / "first_100" / "devset_gemini_multiquery_minilm_streamlit_top20" / "scores.json"
 SCORES_DIR = TFM_ROOT / "music-crs-evaluator" / "exp" / "scores" / "devset"
 PREDICTIONS_DIR = TFM_ROOT / "music-crs-evaluator" / "exp" / "inference" / "devset"
 
@@ -32,136 +33,19 @@ EXPERIMENT_NOTES = {
     "llama1b_bm25_devset": "Llama 3.2 1B response generator with BM25 retrieval on devset.",
 }
 
-MANUAL_RESULTS = [
-    {
-        "experiment": "BM25 + tag_list",
-        "split": "Blind A",
-        "ndcg@20": 0.1807,
-        "catalog_diversity": 0.0307,
-        "lexical_diversity": 0.6723,
-        "llm_judge_score": 2.8000,
-        "composite_score": 0.2956,
-        "source": "Codabench",
-        "note": "Best observed model so far. Tags give BM25 strong exact lexical signals.",
-    },
-    {
-        "experiment": "BM25 + Gemini + tag_list",
-        "split": "Blind A",
-        "ndcg@20": 0.1630,
-        "catalog_diversity": 0.0307,
-        "lexical_diversity": 0.6626,
-        "llm_judge_score": 2.2500,
-        "composite_score": 0.2446,
-        "source": "Codabench",
-        "note": "Gemini tag expansion is competitive, but it still underperforms plain BM25 + tags.",
-    },
-    {
-        "experiment": "BM25",
-        "split": "Blind A",
-        "ndcg@20": 0.1357,
-        "catalog_diversity": 0.0214,
-        "lexical_diversity": 0.6376,
-        "llm_judge_score": 2.3000,
-        "composite_score": 0.2312,
-        "source": "Codabench",
-        "note": "Strong lexical baseline without tag_list in the catalog fields.",
-    },
-    {
-        "experiment": "BERT + Gemini",
-        "split": "Blind A",
-        "ndcg@20": 0.0159,
-        "catalog_diversity": 0.0233,
-        "lexical_diversity": 0.6591,
-        "llm_judge_score": 3.1500,
-        "composite_score": 0.2374,
-        "source": "Codabench",
-        "note": "Best LLM judge score, but retrieval remains far below BM25 variants.",
-    },
-    {
-        "experiment": "BERT + Gemini + tag + conversation",
-        "split": "Blind A",
-        "ndcg@20": 0.0175,
-        "catalog_diversity": 0.0163,
-        "lexical_diversity": 0.6565,
-        "llm_judge_score": 1.8000,
-        "composite_score": 0.1360,
-        "source": "Codabench",
-        "note": "Keeping the conversation helps slightly over some Gemini-BERT variants, but not enough.",
-    },
-    {
-        "experiment": "BERT + Gemini + tag",
-        "split": "Blind A",
-        "ndcg@20": 0.0150,
-        "catalog_diversity": 0.0240,
-        "lexical_diversity": 0.6530,
-        "llm_judge_score": 2.0000,
-        "composite_score": 0.1502,
-        "source": "Codabench",
-        "note": "Plausible semantic expansion, weak exact hidden-track recovery.",
-    },
-    {
-        "experiment": "BERT",
-        "split": "Blind A",
-        "ndcg@20": 0.0112,
-        "catalog_diversity": 0.0117,
-        "lexical_diversity": 0.6466,
-        "llm_judge_score": 1.4500,
-        "composite_score": 0.1052,
-        "source": "Codabench",
-        "note": "Dense retrieval alone performs poorly for this exact-track task.",
-    },
-    {
-        "experiment": "BERT + tag_list",
-        "split": "Blind A",
-        "ndcg@20": 0.0000,
-        "catalog_diversity": 0.0130,
-        "lexical_diversity": 0.6325,
-        "llm_judge_score": 2.3500,
-        "composite_score": 0.1658,
-        "source": "Codabench",
-        "note": "Adding noisy tags to dense embeddings collapses exact-track retrieval in this run.",
-    },
-]
-
 DEVSET_SUBSET_RESULTS = [
     {
-        "experiment": "BM25 + Gemini controlled keywords + query-type router",
+        "experiment": "Clean baseline BERT + raw conversation",
         "split": "Devset first 50 conversations",
         "turns_evaluated": 400,
-        "ndcg@1": 0.0325,
-        "ndcg@10": 0.11541612893572054,
-        "ndcg@20": 0.15073852033934126,
-        "catalog_diversity": 0.054407172144207684,
-        "lexical_diversity": 0.0,
+        "ndcg@1": 0.0025,
+        "ndcg@10": 0.011400438250866413,
+        "ndcg@20": 0.013322326781414569,
+        "catalog_diversity": 0.014467506532684667,
+        "lexical_diversity": 0.4384776745579862,
         "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "Best local first-50 run. Gemini extracts controlled BM25 terms, then a conservative query-type router reranks only clear artist/title/album/decade/negative-intent turns.",
-    },
-    {
-        "experiment": "BM25 + Gemini controlled keywords, artist/title weighted block x2",
-        "split": "Devset first 50 conversations",
-        "turns_evaluated": 400,
-        "ndcg@1": 0.0325,
-        "ndcg@10": 0.11414415511650364,
-        "ndcg@20": 0.14930209229441888,
-        "catalog_diversity": 0.05126298570244949,
-        "lexical_diversity": 0.5262852351157841,
-        "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "Previous best local BM25 run. The final query repeats Gemini controlled keywords twice and gives artist/title fields higher weight.",
-    },
-    {
-        "experiment": "Clean baseline BM25 + tag_list + raw conversation",
-        "split": "Devset first 50 conversations",
-        "turns_evaluated": 400,
-        "ndcg@1": 0.0175,
-        "ndcg@10": 0.09162452088491813,
-        "ndcg@20": 0.12487742965820994,
-        "catalog_diversity": 0.048926090374115695,
-        "lexical_diversity": 0.49106931629997636,
-        "total_catalog_size": 47071,
-        "source": "Local evaluator, baseline-models-first50 branch",
-        "note": "Upstream baseline code on the first 50 devset conversations, using raw conversation text and catalog fields track, artist, album, tag_list, and release_date.",
+        "source": "Historical local evaluator",
+        "note": "Original dense baseline using raw conversation text. It shows why exact-track retrieval is difficult with dense embeddings alone.",
     },
     {
         "experiment": "Clean baseline BM25 + raw conversation",
@@ -173,138 +57,73 @@ DEVSET_SUBSET_RESULTS = [
         "catalog_diversity": 0.040916912748826244,
         "lexical_diversity": 0.4877534278682761,
         "total_catalog_size": 47071,
-        "source": "Local evaluator, baseline-models-first50 branch",
-        "note": "Upstream baseline code on the first 50 devset conversations, using raw conversation text and catalog fields track, artist, album, and release_date.",
+        "source": "Historical local evaluator",
+        "note": "Original BM25 baseline using raw conversation text and basic catalog fields.",
     },
     {
-        "experiment": "MiniLM + artist profile + decade + BM25 hybrid reranker",
+        "experiment": "Clean baseline BM25 + tag_list + raw conversation",
+        "split": "Devset first 50 conversations",
+        "turns_evaluated": 400,
+        "ndcg@1": 0.0175,
+        "ndcg@10": 0.09162452088491813,
+        "ndcg@20": 0.12487742965820994,
+        "catalog_diversity": 0.048926090374115695,
+        "lexical_diversity": 0.49106931629997636,
+        "total_catalog_size": 47071,
+        "source": "Historical local evaluator",
+        "note": "BM25 baseline with tag_list added to the retrieval corpus. Tags improve top-20 recall but add noise.",
+    },
+    {
+        "experiment": "BM25 + Gemini controlled keywords, artist/title block x2",
         "split": "Devset first 50 conversations",
         "turns_evaluated": 400,
         "ndcg@1": 0.0325,
-        "ndcg@10": 0.08925567039128843,
-        "ndcg@20": 0.10458119860417942,
-        "catalog_diversity": 0.06827983259331648,
+        "ndcg@10": 0.11414415511650364,
+        "ndcg@20": 0.14930209229441888,
+        "catalog_diversity": 0.05126298570244949,
+        "lexical_diversity": 0.5262852351157841,
+        "total_catalog_size": 47071,
+        "source": "Historical local evaluator",
+        "note": "Gemini extracts controlled lexical fields and repeats the keyword block to strengthen artist/title evidence.",
+    },
+    {
+        "experiment": "BM25 + Gemini controlled keywords + static query router",
+        "split": "Devset first 50 conversations",
+        "turns_evaluated": 400,
+        "ndcg@1": 0.0325,
+        "ndcg@10": 0.11541612893572054,
+        "ndcg@20": 0.15073852033934126,
+        "catalog_diversity": 0.054407172144207684,
         "lexical_diversity": 0.0,
         "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "Current best local embedding/reranking run. Adds BM25 lexical candidates over title, artist, album, and tags before structured reranking.",
+        "source": "Historical local evaluator",
+        "note": "Manual query-type reranker that boosts title, artist, album, decade, and negative-intent matches.",
     },
     {
-        "experiment": "MiniLM + artist profile + decade + structured reranker",
+        "experiment": "BM25 + Gemini controlled keywords + logistic reranker",
         "split": "Devset first 50 conversations",
         "turns_evaluated": 400,
-        "ndcg@1": 0.0400,
-        "ndcg@10": 0.08130748412086836,
-        "ndcg@20": 0.09812400600576054,
-        "catalog_diversity": 0.06694142890527076,
-        "lexical_diversity": 0.0,
+        "ndcg@1": 0.0325,
+        "ndcg@10": 0.11469899631494865,
+        "ndcg@20": 0.15177859138557978,
+        "catalog_diversity": 0.053217479977055934,
+        "lexical_diversity": 0.5275797855262313,
         "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "Previous best local enriched embedding run before adding BM25 lexical candidate generation.",
+        "source": "Latest local evaluator",
+        "note": "Current best local BM25 run. Gemini extracts controlled search terms; BM25 generates candidates; a logistic regression model learns the reranking weights.",
     },
     {
-        "experiment": "BM25 + Gemini + tag_list",
+        "experiment": "MiniLM + Gemini references + artist profile + decade",
         "split": "Devset first 50 conversations",
         "turns_evaluated": 400,
-        "ndcg@1": 0.0150,
-        "ndcg@10": 0.08928339778789217,
-        "ndcg@20": 0.1206117972983663,
-        "catalog_diversity": 0.04661043954876676,
-        "lexical_diversity": 0.4865810019518543,
+        "ndcg@1": 0.0375,
+        "ndcg@10": 0.07805621984489183,
+        "ndcg@20": 0.09567336416729033,
+        "catalog_diversity": 0.0687684561619681,
+        "lexical_diversity": 0.518107476635514,
         "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "Previous first-50 devset reference run.",
-    },
-    {
-        "experiment": "Clean baseline BERT + raw conversation",
-        "split": "Devset first 50 conversations",
-        "turns_evaluated": 400,
-        "ndcg@1": 0.0025,
-        "ndcg@10": 0.011400438250866413,
-        "ndcg@20": 0.013322326781414569,
-        "catalog_diversity": 0.014467506532684667,
-        "lexical_diversity": 0.4384776745579862,
-        "total_catalog_size": 47071,
-        "source": "Local evaluator, baseline-models-first50 branch",
-        "note": "Upstream BERT baseline code on the first 50 devset conversations, using raw conversation text.",
-    },
-    {
-        "experiment": "BERT + Gemini multi-query fusion + tag_list",
-        "split": "Devset first 50 conversations",
-        "turns_evaluated": 400,
-        "ndcg@1": 0.0050,
-        "ndcg@10": 0.0172569051749283,
-        "ndcg@20": 0.022337180121647184,
-        "catalog_diversity": 0.037793970810052896,
-        "lexical_diversity": 0.4600994125621328,
-        "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "Each Gemini reference track is embedded separately; rankings are fused with RRF.",
-    },
-    {
-        "experiment": "BERT + Gemini multi-query fusion + tag_list + conversation",
-        "split": "Devset first 50 conversations",
-        "turns_evaluated": 400,
-        "ndcg@1": 0.0050,
-        "ndcg@10": 0.01896599825802791,
-        "ndcg@20": 0.025201424361161535,
-        "catalog_diversity": 0.04100189076076565,
-        "lexical_diversity": 0.46515103482632125,
-        "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "Hybrid fusion: Gemini reference queries plus original conversation with higher weight.",
-    },
-    {
-        "experiment": "BERT + Gemini multi-query fusion, no tag_list",
-        "split": "Devset first 50 conversations",
-        "turns_evaluated": 400,
-        "ndcg@1": 0.0100,
-        "ndcg@10": 0.03209145337491858,
-        "ndcg@20": 0.03769050564476374,
-        "catalog_diversity": 0.03526587495485543,
-        "lexical_diversity": 0.4684398570861453,
-        "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "No-tag rerun. This overwrote the original folder, but improved over the tag-list multi-query variant.",
-    },
-    {
-        "experiment": "BERT + Gemini multi-query fusion + conversation, no tag_list",
-        "split": "Devset first 50 conversations",
-        "turns_evaluated": 400,
-        "ndcg@1": 0.0050,
-        "ndcg@10": 0.02742079093061506,
-        "ndcg@20": 0.0336234679375138,
-        "catalog_diversity": 0.03354507021308237,
-        "lexical_diversity": 0.47563773788635444,
-        "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "No-tag hybrid rerun. The original conversation did not help as much as in the tag-list setting.",
-    },
-    {
-        "experiment": "BERT + Gemini top-2 fusion, no tag_list/release_date",
-        "split": "Devset first 50 conversations",
-        "turns_evaluated": 400,
-        "ndcg@1": 0.0100,
-        "ndcg@10": 0.02586563444205212,
-        "ndcg@20": 0.03042129429837016,
-        "catalog_diversity": 0.036583034139916294,
-        "lexical_diversity": 0.4625166473342785,
-        "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "Uses only Gemini references 1 and 2. Corpus fields: track, artist, album.",
-    },
-    {
-        "experiment": "BERT + Gemini top-2 fusion, no tag_list/release_date, topk folder",
-        "split": "Devset first 50 conversations",
-        "turns_evaluated": 400,
-        "ndcg@1": 0.0100,
-        "ndcg@10": 0.02586563444205212,
-        "ndcg@20": 0.03042129429837016,
-        "catalog_diversity": 0.036583034139916294,
-        "lexical_diversity": 0.46150862068965515,
-        "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "This result folder was named topk10, but the config still used topk=50. Config has now been fixed; rerun for a true topk=10 score.",
+        "source": "Latest local evaluator",
+        "note": "Best retained MiniLM-only embedding run for Streamlit: Gemini reference tracks are embedded against catalog metadata enriched with artist profile and release decade.",
     },
 ]
 
@@ -504,34 +323,6 @@ def load_devset_conversations(path):
 
 
 @st.cache_data
-def load_embedding_projection(path):
-    if not path.exists():
-        return pd.DataFrame()
-
-    df = pd.read_csv(path)
-    text_columns = [
-        column
-        for column in df.columns
-        if pd.api.types.is_object_dtype(df[column])
-        or pd.api.types.is_string_dtype(df[column])
-    ]
-    for column in text_columns:
-        df[column] = df[column].map(clean_text)
-
-    if "turn_number" in df.columns:
-        turn_numbers = pd.to_numeric(df["turn_number"], errors="coerce").astype("Int64")
-        df["turn_number_key"] = turn_numbers.astype(str).replace("<NA>", "")
-    if "gemini_reference_rank" in df.columns:
-        ranks = pd.to_numeric(df["gemini_reference_rank"], errors="coerce").astype("Int64")
-        df["gemini_reference_rank_key"] = ranks.astype(str).replace("<NA>", "")
-    if "retrieved_rank" in df.columns:
-        ranks = pd.to_numeric(df["retrieved_rank"], errors="coerce").astype("Int64")
-        df["retrieved_rank_key"] = ranks.astype(str).replace("<NA>", "")
-
-    return df
-
-
-@st.cache_data
 def load_bm25_explanations(path):
     if not path.exists():
         return pd.DataFrame()
@@ -576,6 +367,42 @@ def load_bm25_explanations(path):
     if "is_ground_truth" in df.columns:
         df["is_ground_truth"] = df["is_ground_truth"].astype(str).str.lower().isin(["true", "1"])
     return df
+
+
+@st.cache_data
+def load_minilm_explanations(path):
+    if not path.exists():
+        return pd.DataFrame()
+
+    df = pd.read_csv(path)
+    text_columns = [
+        column
+        for column in df.columns
+        if pd.api.types.is_object_dtype(df[column])
+        or pd.api.types.is_string_dtype(df[column])
+    ]
+    for column in text_columns:
+        df[column] = df[column].map(clean_text)
+
+    if "turn_number" in df.columns:
+        df["turn_number"] = pd.to_numeric(df["turn_number"], errors="coerce").astype("Int64")
+    if "rank" in df.columns:
+        df["rank_number"] = pd.to_numeric(df["rank"], errors="coerce")
+    if "gemini_reference_rank" in df.columns:
+        df["gemini_reference_rank_number"] = pd.to_numeric(df["gemini_reference_rank"], errors="coerce")
+    if "cosine_similarity" in df.columns:
+        df["cosine_similarity"] = pd.to_numeric(df["cosine_similarity"], errors="coerce")
+    if "is_ground_truth" in df.columns:
+        df["is_ground_truth"] = df["is_ground_truth"].astype(str).str.lower().isin(["true", "1"])
+    return df
+
+
+@st.cache_data
+def load_score_json(path):
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8") as file:
+        return json.load(file)
 
 
 @st.cache_data
@@ -625,14 +452,17 @@ def format_metric(value, digits=4):
 
 
 def metric_grid(results):
-    best = results.sort_values("composite_score", ascending=False).iloc[0]
     best_ndcg = results.sort_values("ndcg@20", ascending=False).iloc[0]
     col1, col2, col3, col4 = st.columns(4)
 
-    col1.metric("Best composite score", format_metric(best["composite_score"]), best["experiment"])
+    if "composite_score" in results:
+        best = results.sort_values("composite_score", ascending=False).iloc[0]
+        col1.metric("Best composite score", format_metric(best["composite_score"]), best["experiment"])
+    else:
+        col1.metric("Models shown", len(results))
     col2.metric("Best nDCG@20", format_metric(best_ndcg["ndcg@20"]), best_ndcg["experiment"])
-    col3.metric("Experiments", len(results))
-    col4.metric("Best LLM judge score", format_metric(results["llm_judge_score"].max()))
+    col3.metric("Best nDCG@10", format_metric(results["ndcg@10"].max()) if "ndcg@10" in results else "n/a")
+    col4.metric("Best catalog diversity", format_metric(results["catalog_diversity"].max()) if "catalog_diversity" in results else "n/a")
 
 
 def render_header(title, caption):
@@ -724,7 +554,7 @@ def render_project_overview():
     st.markdown(
         """
         - Start with **Model Results** to see which retrieval strategies worked best.
-        - Use **Devset Embedding Map** to inspect the embedding-based Gemini experiments and example turns with known ground truth.
+        - Use **MiniLM Explanation** to inspect the embedding-based Gemini experiments and example turns with known ground truth.
         - Use **BM25 Explanation** to see how the current BM25 + Gemini keyword model builds and matches its query.
         """
     )
@@ -736,63 +566,24 @@ def render_project_overview():
 def render_model_results():
     render_header(
         "Model Results",
-        "Compare retrieval and response metrics for the model variants tested in this project.",
+        "Compare the final cleaned retrieval models kept for the project.",
     )
-    manual_df = pd.DataFrame(MANUAL_RESULTS).sort_values(
-        "composite_score",
-        ascending=False,
-    )
-    metric_grid(manual_df)
-
-    st.markdown("#### Blindset-A Codabench Scores")
-    st.caption(
-        "Official Blindset-A submission results. The true target tracks are hidden, so only aggregate metrics are available."
-    )
-    st.dataframe(manual_df, width="stretch", hide_index=True)
-
-    blind_metric = st.segmented_control(
-        "Compare models by",
-        ["composite_score", "ndcg@20", "llm_judge_score", "lexical_diversity", "catalog_diversity"],
-        default="composite_score",
-    )
-    blind_fig = px.bar(
-        manual_df.sort_values(blind_metric, ascending=False),
-        x=blind_metric,
-        y="experiment",
-        orientation="h",
-        color="experiment",
-        text=blind_metric,
-        title=f"Blind-A comparison by {blind_metric}",
-    )
-    blind_fig.update_traces(texttemplate="%{text:.4f}", textposition="outside")
-    blind_fig.update_layout(
-        height=520,
-        showlegend=False,
-        xaxis_title=blind_metric,
-        yaxis_title="",
-        yaxis=dict(autorange="reversed"),
-    )
-    st.plotly_chart(blind_fig, width="stretch")
 
     st.markdown("#### Devset Subset Scores")
     st.caption(
-        "Local evaluation on the first 50 conversations of TalkPlayData-Challenge-Dataset, "
-        "with all 8 turns evaluated per conversation. These scores are not directly comparable "
-        "to the Blindset-A Codabench results."
+        "Local evaluation on the first 50 conversations of TalkPlayData-Challenge-Dataset, with all 8 turns evaluated per conversation."
     )
     devset_df = pd.DataFrame(DEVSET_SUBSET_RESULTS)
+    metric_grid(devset_df)
     st.dataframe(devset_df, width="stretch", hide_index=True)
 
     st.markdown("#### Interpretation")
     st.markdown(
         """
         - For this challenge, the most important retrieval signal is nDCG@20: whether the exact target track appears in the top 20.
-        - The current best local devset system is BM25 with Gemini controlled keywords and a conservative query-type router.
-        - The clean upstream baseline comparison shows that BM25 is much stronger than BERT for exact target-track recovery.
-        - Adding tag_list to the clean BM25 baseline improves nDCG@20, but its noisy terms can slightly disturb top-10 ranking.
-        - The biggest gain came from using Gemini as a controlled lexical query extractor instead of a free-form similar-song generator.
+        - The current best local BM25 system uses Gemini as a controlled lexical query extractor and learns the reranker weights with logistic regression.
         - Dense embedding variants retrieve semantically plausible neighborhoods, but they are weak for this evaluation because nDCG@20 rewards exact track recovery.
-        - The most useful thesis comparison is clean BM25 vs clean BM25 + tag_list vs BM25 + Gemini controlled keywords, because it shows how lexical evidence improves exact retrieval.
+        - The embedding model is kept for analysis and explainability, while the learned BM25 reranker is the strongest nDCG@20 model in this branch.
         """
     )
 
@@ -1616,21 +1407,149 @@ def render_oracle_check(ground_truth_df, gemini_df, retrieved_df, selected_sessi
     st.dataframe(reference_summary, width="stretch", hide_index=True)
 
 
+def render_minilm_explanation(df, conversation_details, scores):
+    render_header(
+        "MiniLM Explanation",
+        "Inspect the MiniLM embedding model without PCA or UMAP projection.",
+    )
+    if df.empty:
+        st.warning("MiniLM explanation data was not found.")
+        st.code(
+            "python export_minilm_explanation_to_csv.py "
+            "--run_dir exp/first_100/devset_gemini_multiquery_minilm_streamlit_top20 "
+            "--gemini_cache_dir cache/gemini_expansions_devset_first100 "
+            "--output_csv visualize_streamlit/minilm_reference_retrieval_table.csv "
+            "--topk_retrieved_per_reference 20 "
+            "--corpus_types track_name artist_name album_name artist_style_profile release_decade "
+            "--device cuda",
+            language="powershell",
+        )
+        return
+
+    st.markdown(
+        """
+        **How to read this page.** Gemini first proposes five reference tracks from the conversation.
+        Each reference track is embedded with MiniLM using the same catalog metadata fields:
+        track, artist, album, artist style profile, and release decade. The tables below show the final
+        top-20 recommendation list and the nearest catalog tracks retrieved from each Gemini reference.
+        """
+    )
+
+    final_df = df[df["row_type"] == "final_recommendation"].copy()
+    ground_truth_df = df[df["row_type"] == "ground_truth"].copy()
+    reference_df = df[df["row_type"] == "gemini_reference"].copy()
+    retrieved_df = df[df["row_type"] == "retrieved_from_reference"].copy()
+
+    hit_rows = final_df[final_df["is_ground_truth"]]
+    found_turns = hit_rows[["session_id", "turn_number"]].drop_duplicates()
+    total_turns = ground_truth_df[["session_id", "turn_number"]].drop_duplicates()
+    missing_count = max(len(total_turns) - len(found_turns), 0)
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("nDCG@20", format_metric(scores.get("ndcg@20")))
+    col2.metric("Ground truth found", len(found_turns))
+    col3.metric("Missing from top 20", missing_count)
+    col4.metric("Turns evaluated", int(scores.get("subset_turns", len(total_turns))))
+
+    session_options = sorted(reference_df["session_id"].dropna().unique())
+    if not session_options:
+        st.info("No Gemini reference tracks are available in the MiniLM explanation table.")
+        return
+
+    selected_session = st.sidebar.selectbox("Session", session_options, key="minilm_session")
+    session_turns = reference_df[reference_df["session_id"] == selected_session]["turn_number"].dropna().unique()
+    turn_options = sorted([int(turn) for turn in session_turns])
+    selected_turn = st.sidebar.selectbox("Turn", turn_options, key="minilm_turn")
+
+    key_filter = (df["session_id"] == selected_session) & (df["turn_number"] == selected_turn)
+    turn_final = final_df[key_filter].sort_values("rank_number").copy()
+    turn_ground_truth = ground_truth_df[key_filter].copy()
+    turn_references = reference_df[key_filter].sort_values("gemini_reference_rank_number").copy()
+    turn_retrieved = retrieved_df[key_filter].sort_values(
+        ["gemini_reference_rank_number", "rank_number"]
+    ).copy()
+
+    detail = conversation_details.get((selected_session, int(selected_turn)))
+    render_devset_conversation(detail)
+
+    st.markdown("#### Ground Truth And Gemini References")
+    summary_rows = []
+    for row in turn_ground_truth.itertuples(index=False):
+        summary_rows.append(
+            {
+                "type": "Ground truth",
+                "rank": "",
+                "track": row.track_name,
+                "artist": row.artist_name,
+                "album": row.album_name,
+                "tags": row.tag_list,
+            }
+        )
+    for row in turn_references.itertuples(index=False):
+        summary_rows.append(
+            {
+                "type": "Gemini reference",
+                "rank": int(row.gemini_reference_rank_number),
+                "track": row.track_name,
+                "artist": row.artist_name,
+                "album": row.album_name,
+                "tags": row.tag_list,
+            }
+        )
+    st.dataframe(pd.DataFrame(summary_rows), width="stretch", hide_index=True)
+
+    st.markdown("#### Final Top-20 Recommendations")
+    final_table = turn_final[
+        ["rank", "track_name", "artist_name", "album_name", "tag_list", "is_ground_truth"]
+    ].rename(
+        columns={
+            "track_name": "track",
+            "artist_name": "artist",
+            "album_name": "album",
+            "tag_list": "tags",
+        }
+    )
+    st.dataframe(final_table, width="stretch", hide_index=True, height=420)
+
+    st.markdown("#### MiniLM Nearest Tracks For Each Gemini Reference")
+    st.caption("Each table shows the catalog tracks retrieved from one Gemini-generated reference song before final fusion.")
+    if turn_retrieved.empty:
+        st.info("No per-reference MiniLM retrieval rows are available for this turn.")
+        return
+
+    ground_truth_id = turn_ground_truth.iloc[0]["track_id"] if not turn_ground_truth.empty else None
+    reference_labels = {
+        int(row.gemini_reference_rank_number): f"{int(row.gemini_reference_rank_number)}. {row.track_name} - {row.artist_name}"
+        for row in turn_references.itertuples(index=False)
+    }
+    for reference_rank, reference_rows in turn_retrieved.groupby("gemini_reference_rank_number"):
+        reference_rows = reference_rows.sort_values("rank_number").copy()
+        found = reference_rows[reference_rows["track_id"] == ground_truth_id]
+        status = "target not found"
+        if not found.empty:
+            status = f"target found at rank {int(found['rank_number'].min())}"
+        label = reference_labels.get(int(reference_rank), f"Gemini reference {int(reference_rank)}")
+        with st.expander(f"{label} - {status}"):
+            table = reference_rows[
+                ["rank", "cosine_similarity", "track_name", "artist_name", "album_name", "tag_list", "is_ground_truth"]
+            ].rename(
+                columns={
+                    "track_name": "track",
+                    "artist_name": "artist",
+                    "album_name": "album",
+                    "tag_list": "tags",
+                }
+            )
+            st.dataframe(table, width="stretch", hide_index=True, height=min(420, 84 + 36 * len(table)))
+
+
 def render_embedding_map(df, conversation_details):
     render_header(
         "Devset Embedding Map",
         "Place Gemini-generated reference tracks inside the catalog embedding space.",
     )
     if df.empty:
-        st.warning("Embedding projection data was not found.")
-        st.write(
-            "Create it after the matching BERT cache exists. This is an offline step, so Streamlit stays lightweight."
-        )
-        st.code(
-            "python create_gemini_embedding_projection.py "
-            "--gemini_cache_dir ./cache/gemini_expansions_devset_first100",
-            language="powershell",
-        )
+        st.warning("This retired embedding-map view has no projection data.")
         return
 
     st.markdown(
@@ -2060,7 +1979,7 @@ def main():
     valid_pages = {
         "Project Overview",
         "Model Results",
-        "Devset Embedding Map",
+        "MiniLM Explanation",
         "BM25 Explanation",
     }
     if "active_page" not in st.session_state:
@@ -2085,11 +2004,11 @@ def main():
             args=("Model Results",),
         )
         st.button(
-            "Devset Embedding Map",
+            "MiniLM Explanation",
             width="stretch",
-            type="primary" if st.session_state.active_page == "Devset Embedding Map" else "secondary",
+            type="primary" if st.session_state.active_page == "MiniLM Explanation" else "secondary",
             on_click=set_active_page,
-            args=("Devset Embedding Map",),
+            args=("MiniLM Explanation",),
         )
         st.button(
             "BM25 Explanation",
@@ -2105,17 +2024,18 @@ def main():
             st.caption("Start here for the challenge goal, data, and model families.")
         elif page == "Model Results":
             st.caption("Compare model performance and understand each metric.")
-        elif page == "Devset Embedding Map":
-            st.caption("See Gemini references and target tracks inside the BERT embedding space.")
+        elif page == "MiniLM Explanation":
+            st.caption("Inspect MiniLM references, final recommendations, and per-reference retrieval tables.")
         elif page == "BM25 Explanation":
             st.caption("Inspect controlled BM25 query terms, matches, and router evidence.")
 
     if page == "Project Overview":
         render_project_overview()
-    elif page == "Devset Embedding Map":
-        embedding_projection_df = load_embedding_projection(EMBEDDING_PROJECTION_PATH)
+    elif page == "MiniLM Explanation":
+        minilm_explanation_df = load_minilm_explanations(MINILM_EXPLANATION_PATH)
         devset_conversations = load_devset_conversations(DEVSET_CONVERSATION_PATH)
-        render_embedding_map(embedding_projection_df, devset_conversations)
+        minilm_scores = load_score_json(MINILM_SCORES_PATH)
+        render_minilm_explanation(minilm_explanation_df, devset_conversations, minilm_scores)
     elif page == "BM25 Explanation":
         bm25_explanation_df = load_bm25_explanations(BM25_EXPLANATION_PATH)
         devset_conversations = load_devset_conversations(DEVSET_CONVERSATION_PATH)

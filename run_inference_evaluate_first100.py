@@ -151,6 +151,7 @@ def load_model(
         query_type_album_weight=config.get("query_type_album_weight", 0.35),
         query_type_decade_weight=config.get("query_type_decade_weight", 0.18),
         query_type_negative_weight=config.get("query_type_negative_weight", 0.35),
+        learned_query_type_weights_path=config.get("learned_query_type_weights_path", None),
         retrieval_only=config.get("retrieval_only", False),
     )
 

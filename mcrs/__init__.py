@@ -43,6 +43,7 @@ def load_crs_baseline(
     query_type_album_weight=0.35,
     query_type_decade_weight=0.18,
     query_type_negative_weight=0.35,
+    learned_query_type_weights_path=None,
     retrieval_only=False,
 ):
     return CRS_BASELINE(
@@ -87,5 +88,6 @@ def load_crs_baseline(
         query_type_album_weight=query_type_album_weight,
         query_type_decade_weight=query_type_decade_weight,
         query_type_negative_weight=query_type_negative_weight,
+        learned_query_type_weights_path=learned_query_type_weights_path,
         retrieval_only=retrieval_only,
     )
