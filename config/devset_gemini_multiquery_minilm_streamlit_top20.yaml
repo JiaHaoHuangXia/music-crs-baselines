@@ -1,0 +1,35 @@
+lm_type: "meta-llama/Llama-3.2-1B-Instruct"
+retrieval_type: "sentence_transformer"
+
+test_dataset_name: "talkpl-ai/TalkPlayData-Challenge-Dataset"
+item_db_name: "talkpl-ai/TalkPlayData-Challenge-Track-Metadata"
+user_db_name: "talkpl-ai/TalkPlayData-Challenge-User-Metadata"
+
+track_split_types:
+  - "all_tracks"
+
+user_split_types:
+  - "all_users"
+
+corpus_types:
+  - "track_name"
+  - "artist_name"
+  - "album_name"
+  - "artist_style_profile"
+  - "release_decade"
+
+cache_dir: "./cache"
+device: "cuda"
+attn_implementation: "eager"
+retrieval_only: false
+
+use_gemini_expansion: true
+gemini_expansion_mode: "multi_query_fusion"
+gemini_fusion_method: "max_similarity"
+gemini_model_name: "gemini-3.1-flash-lite-preview"
+gemini_cache_dir: "./cache/gemini_expansions_devset_first100"
+gemini_topk_per_reference: 20
+gemini_rrf_k: 60
+include_original_query_in_fusion: false
+original_query_weight: 2.0
+gemini_reference_weight: 1.0

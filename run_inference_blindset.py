@@ -8,7 +8,6 @@ import argparse
 from mcrs import load_crs_baseline
 import torch
 from tqdm import tqdm
-from typing import List, Dict, Any, Tuple
 import pandas as pd
 from omegaconf import OmegaConf
 import shutil
@@ -67,8 +66,7 @@ def main(args):
         - Tracks progress with tqdm progress bar
         - Saves comprehensive results for evaluation
     """
-    print("Removing cache directory for preventing memory issues...")
-    #os.system("rm -rf cache")
+    print("Removing BERT cache directory for preventing memory issues...")
     bert_cache = os.path.join("cache", "bert")
     if os.path.exists(bert_cache):
         shutil.rmtree(bert_cache)
@@ -85,10 +83,11 @@ def main(args):
         device=config.device,
         attn_implementation=config.attn_implementation,
         dtype=torch.bfloat16,
-        # Gemini query expansion
         use_gemini_expansion=config.get("use_gemini_expansion", False),
         gemini_model_name=config.get("gemini_model_name", "gemini-3.1-flash-lite"),
         gemini_cache_dir=config.get("gemini_cache_dir", "./cache/gemini_expansions"),
+        gemini_keyword_field_weights=config.get("gemini_keyword_field_weights", None),
+        gemini_keyword_block_weight=config.get("gemini_keyword_block_weight", 1),
         gemini_expansion_mode=config.get("gemini_expansion_mode", "tag_query"),
         gemini_topk_per_reference=config.get("gemini_topk_per_reference", 50),
         gemini_rrf_k=config.get("gemini_rrf_k", 60),
@@ -100,33 +99,39 @@ def main(args):
         gemini_reference_weight=config.get("gemini_reference_weight", 1.0),
         gemini_max_reference_tracks=config.get("gemini_max_reference_tracks", None),
         gemini_fusion_method=config.get("gemini_fusion_method", "rrf"),
+        rerank_tag_weight=config.get("rerank_tag_weight", 0.04),
+        rerank_artist_profile_weight=config.get("rerank_artist_profile_weight", 0.04),
+        rerank_decade_weight=config.get("rerank_decade_weight", 0.02),
+        hybrid_bm25_corpus_types=config.get("hybrid_bm25_corpus_types", None),
+        hybrid_bm25_topk_per_reference=config.get("hybrid_bm25_topk_per_reference", 100),
+        hybrid_bm25_weight=config.get("hybrid_bm25_weight", 0.12),
+        hybrid_artist_match_weight=config.get("hybrid_artist_match_weight", 0.03),
+        hybrid_album_match_weight=config.get("hybrid_album_match_weight", 0.02),
+        hybrid_multi_source_weight=config.get("hybrid_multi_source_weight", 0.03),
+        use_query_type_routing=config.get("use_query_type_routing", False),
+        query_type_candidate_topk=config.get("query_type_candidate_topk", 100),
+        query_type_rank_weight=config.get("query_type_rank_weight", 1.0),
+        query_type_title_weight=config.get("query_type_title_weight", 0.80),
+        query_type_artist_weight=config.get("query_type_artist_weight", 0.55),
+        query_type_album_weight=config.get("query_type_album_weight", 0.35),
+        query_type_decade_weight=config.get("query_type_decade_weight", 0.18),
+        query_type_negative_weight=config.get("query_type_negative_weight", 0.35),
+        learned_query_type_weights_path=config.get("learned_query_type_weights_path", None),
+        retrieval_only=config.get("retrieval_only", False),
     )
     db = load_dataset(config.test_dataset_name, split="test")
-    # Prepare all batch data at once
     batch_data, metadata = [], []
-    #for item in db:
-    for idx, item in enumerate(db):
-        #if idx > 0:   # only first conversation
-            #break
+    for item in db:
         user_id = item['user_id']
         session_id = item['session_id']
-        #chat_history = item['conversations'][:-1]
-        #user_query = item['conversations'][-1]['content']
-        #turn_number = item['conversations'][-1]['turn_number']
         turn_numbers = sorted(set(
             msg["turn_number"]
             for msg in item["conversations"]
             if msg["role"] == "user"
         ))
 
+        # Blindset requires one prediction for the final user request in each session.
         target_turn_number = turn_numbers[-1]
-
-        #for target_turn_number in turn_numbers[:1]:  # only 1 Gemini call
-            #chat_history, user_query = chat_history_parser(
-            #    item["conversations"],
-            #    music_crs,
-            #    target_turn_number
-            #)
         chat_history, user_query = chat_history_parser(
             item["conversations"],
             music_crs,

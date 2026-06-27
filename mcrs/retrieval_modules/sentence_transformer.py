@@ -9,6 +9,12 @@ import torch.nn.functional as F
 from datasets import concatenate_datasets, load_dataset
 from sentence_transformers import SentenceTransformer
 
+from mcrs.style_profiles import (
+    attach_artist_style_profiles,
+    corpus_cache_name,
+    weighted_metadata_lines,
+)
+
 
 class SENTENCE_TRANSFORMER_MODEL:
     """Embedding retriever using a sentence-transformers model.
@@ -30,7 +36,7 @@ class SENTENCE_TRANSFORMER_MODEL:
         self.dataset_name = dataset_name
         self.split_types = split_types
         self.corpus_types = corpus_types
-        self.corpus_name = "_".join(corpus_types)
+        self.corpus_name = corpus_cache_name(corpus_types)
         self.cache_dir = cache_dir
         self.model_name = model_name
         self.model_cache_name = model_name.replace("/", "__")
@@ -64,16 +70,11 @@ class SENTENCE_TRANSFORMER_MODEL:
         metadata_concat_dataset = concatenate_datasets(
             [metadata_dataset[split_type] for split_type in self.split_types]
         )
-        return {item["track_id"]: item for item in metadata_concat_dataset}
+        metadata_dict = {item["track_id"]: item for item in metadata_concat_dataset}
+        return attach_artist_style_profiles(metadata_dict)
 
     def _stringify_metadata(self, metadata: Dict[str, object]) -> str:
-        parts = []
-        for corpus_type in self.corpus_types:
-            entity = metadata[corpus_type]
-            if isinstance(entity, list):
-                entity = ", ".join(entity)
-            parts.append(f"{corpus_type}: {entity}")
-        return "\n".join(parts)
+        return "\n".join(weighted_metadata_lines(metadata, self.corpus_types))
 
     def _embed_texts(self, texts: List[str]) -> torch.Tensor:
         embeddings = self.model.encode(

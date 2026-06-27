@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import html
+import math
 
 import pandas as pd
 import plotly.express as px
@@ -10,10 +11,10 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[1]
 TFM_ROOT = ROOT.parent
-CSV_PATH = ROOT / "visualize_streamlit" / "gemini_to_catalog_similarity_table.csv"
-DEVSET_GEMINI_PATH = ROOT / "visualize_streamlit" / "devset_gemini_ground_truth_table.csv"
 DEVSET_CONVERSATION_PATH = ROOT / "visualize_streamlit" / "devset_conversation_details.json"
-EMBEDDING_PROJECTION_PATH = ROOT / "visualize_streamlit" / "gemini_embedding_projection.csv"
+BM25_EXPLANATION_PATH = ROOT / "visualize_streamlit" / "bm25_explanation_table.csv"
+MINILM_EXPLANATION_PATH = ROOT / "visualize_streamlit" / "minilm_reference_retrieval_table.csv"
+MINILM_SCORES_PATH = ROOT / "exp" / "first_100" / "devset_gemini_multiquery_minilm_streamlit_top20" / "scores.json"
 SCORES_DIR = TFM_ROOT / "music-crs-evaluator" / "exp" / "scores" / "devset"
 PREDICTIONS_DIR = TFM_ROOT / "music-crs-evaluator" / "exp" / "inference" / "devset"
 
@@ -32,188 +33,97 @@ EXPERIMENT_NOTES = {
     "llama1b_bm25_devset": "Llama 3.2 1B response generator with BM25 retrieval on devset.",
 }
 
-MANUAL_RESULTS = [
-    {
-        "experiment": "BM25 + tag_list",
-        "split": "Blind A",
-        "ndcg@20": 0.1807,
-        "catalog_diversity": 0.0307,
-        "lexical_diversity": 0.6723,
-        "llm_judge_score": 2.8000,
-        "composite_score": 0.2956,
-        "source": "Codabench",
-        "note": "Best observed model so far. Tags give BM25 strong exact lexical signals.",
-    },
-    {
-        "experiment": "BM25 + Gemini + tag_list",
-        "split": "Blind A",
-        "ndcg@20": 0.1630,
-        "catalog_diversity": 0.0307,
-        "lexical_diversity": 0.6626,
-        "llm_judge_score": 2.2500,
-        "composite_score": 0.2446,
-        "source": "Codabench",
-        "note": "Gemini tag expansion is competitive, but it still underperforms plain BM25 + tags.",
-    },
-    {
-        "experiment": "BM25",
-        "split": "Blind A",
-        "ndcg@20": 0.1357,
-        "catalog_diversity": 0.0214,
-        "lexical_diversity": 0.6376,
-        "llm_judge_score": 2.3000,
-        "composite_score": 0.2312,
-        "source": "Codabench",
-        "note": "Strong lexical baseline without tag_list in the catalog fields.",
-    },
-    {
-        "experiment": "BERT + Gemini",
-        "split": "Blind A",
-        "ndcg@20": 0.0159,
-        "catalog_diversity": 0.0233,
-        "lexical_diversity": 0.6591,
-        "llm_judge_score": 3.1500,
-        "composite_score": 0.2374,
-        "source": "Codabench",
-        "note": "Best LLM judge score, but retrieval remains far below BM25 variants.",
-    },
-    {
-        "experiment": "BERT + Gemini + tag + conversation",
-        "split": "Blind A",
-        "ndcg@20": 0.0175,
-        "catalog_diversity": 0.0163,
-        "lexical_diversity": 0.6565,
-        "llm_judge_score": 1.8000,
-        "composite_score": 0.1360,
-        "source": "Codabench",
-        "note": "Keeping the conversation helps slightly over some Gemini-BERT variants, but not enough.",
-    },
-    {
-        "experiment": "BERT + Gemini + tag",
-        "split": "Blind A",
-        "ndcg@20": 0.0150,
-        "catalog_diversity": 0.0240,
-        "lexical_diversity": 0.6530,
-        "llm_judge_score": 2.0000,
-        "composite_score": 0.1502,
-        "source": "Codabench",
-        "note": "Plausible semantic expansion, weak exact hidden-track recovery.",
-    },
-    {
-        "experiment": "BERT",
-        "split": "Blind A",
-        "ndcg@20": 0.0112,
-        "catalog_diversity": 0.0117,
-        "lexical_diversity": 0.6466,
-        "llm_judge_score": 1.4500,
-        "composite_score": 0.1052,
-        "source": "Codabench",
-        "note": "Dense retrieval alone performs poorly for this exact-track task.",
-    },
-    {
-        "experiment": "BERT + tag_list",
-        "split": "Blind A",
-        "ndcg@20": 0.0000,
-        "catalog_diversity": 0.0130,
-        "lexical_diversity": 0.6325,
-        "llm_judge_score": 2.3500,
-        "composite_score": 0.1658,
-        "source": "Codabench",
-        "note": "Adding noisy tags to dense embeddings collapses exact-track retrieval in this run.",
-    },
-]
-
 DEVSET_SUBSET_RESULTS = [
     {
-        "experiment": "BM25 + Gemini + tag_list",
+        "experiment": "Clean baseline BERT + raw conversation",
         "split": "Devset first 50 conversations",
         "turns_evaluated": 400,
-        "ndcg@1": 0.0150,
-        "ndcg@10": 0.08928339778789217,
-        "ndcg@20": 0.1206117972983663,
-        "catalog_diversity": 0.04661043954876676,
-        "lexical_diversity": 0.4865810019518543,
+        "ndcg@1": 0.0025,
+        "ndcg@10": 0.011400438250866413,
+        "ndcg@20": 0.013322326781414569,
+        "catalog_diversity": 0.014467506532684667,
+        "lexical_diversity": 0.4384776745579862,
         "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "Previous first-50 devset reference run.",
+        "source": "Historical local evaluator",
+        "note": "Original dense baseline using raw conversation text. It shows why exact-track retrieval is difficult with dense embeddings alone.",
     },
     {
-        "experiment": "BERT + Gemini multi-query fusion + tag_list",
+        "experiment": "Clean baseline BM25 + raw conversation",
         "split": "Devset first 50 conversations",
         "turns_evaluated": 400,
-        "ndcg@1": 0.0050,
-        "ndcg@10": 0.0172569051749283,
-        "ndcg@20": 0.022337180121647184,
-        "catalog_diversity": 0.037793970810052896,
-        "lexical_diversity": 0.4600994125621328,
+        "ndcg@1": 0.0175,
+        "ndcg@10": 0.0936229490574533,
+        "ndcg@20": 0.12222444085071704,
+        "catalog_diversity": 0.040916912748826244,
+        "lexical_diversity": 0.4877534278682761,
         "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "Each Gemini reference track is embedded separately; rankings are fused with RRF.",
+        "source": "Historical local evaluator",
+        "note": "Original BM25 baseline using raw conversation text and basic catalog fields.",
     },
     {
-        "experiment": "BERT + Gemini multi-query fusion + tag_list + conversation",
+        "experiment": "Clean baseline BM25 + tag_list + raw conversation",
         "split": "Devset first 50 conversations",
         "turns_evaluated": 400,
-        "ndcg@1": 0.0050,
-        "ndcg@10": 0.01896599825802791,
-        "ndcg@20": 0.025201424361161535,
-        "catalog_diversity": 0.04100189076076565,
-        "lexical_diversity": 0.46515103482632125,
+        "ndcg@1": 0.0175,
+        "ndcg@10": 0.09162452088491813,
+        "ndcg@20": 0.12487742965820994,
+        "catalog_diversity": 0.048926090374115695,
+        "lexical_diversity": 0.49106931629997636,
         "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "Hybrid fusion: Gemini reference queries plus original conversation with higher weight.",
+        "source": "Historical local evaluator",
+        "note": "BM25 baseline with tag_list added to the retrieval corpus. Tags improve top-20 recall but add noise.",
     },
     {
-        "experiment": "BERT + Gemini multi-query fusion, no tag_list",
+        "experiment": "BM25 + Gemini controlled keywords, artist/title block x2",
         "split": "Devset first 50 conversations",
         "turns_evaluated": 400,
-        "ndcg@1": 0.0100,
-        "ndcg@10": 0.03209145337491858,
-        "ndcg@20": 0.03769050564476374,
-        "catalog_diversity": 0.03526587495485543,
-        "lexical_diversity": 0.4684398570861453,
+        "ndcg@1": 0.0325,
+        "ndcg@10": 0.11414415511650364,
+        "ndcg@20": 0.14930209229441888,
+        "catalog_diversity": 0.05126298570244949,
+        "lexical_diversity": 0.5262852351157841,
         "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "No-tag rerun. This overwrote the original folder, but improved over the tag-list multi-query variant.",
+        "source": "Historical local evaluator",
+        "note": "Gemini extracts controlled lexical fields and repeats the keyword block to strengthen artist/title evidence.",
     },
     {
-        "experiment": "BERT + Gemini multi-query fusion + conversation, no tag_list",
+        "experiment": "BM25 + Gemini controlled keywords + static query router",
         "split": "Devset first 50 conversations",
         "turns_evaluated": 400,
-        "ndcg@1": 0.0050,
-        "ndcg@10": 0.02742079093061506,
-        "ndcg@20": 0.0336234679375138,
-        "catalog_diversity": 0.03354507021308237,
-        "lexical_diversity": 0.47563773788635444,
+        "ndcg@1": 0.0325,
+        "ndcg@10": 0.11541612893572054,
+        "ndcg@20": 0.15073852033934126,
+        "catalog_diversity": 0.054407172144207684,
+        "lexical_diversity": 0.0,
         "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "No-tag hybrid rerun. The original conversation did not help as much as in the tag-list setting.",
+        "source": "Historical local evaluator",
+        "note": "Manual query-type reranker that boosts title, artist, album, decade, and negative-intent matches.",
     },
     {
-        "experiment": "BERT + Gemini top-2 fusion, no tag_list/release_date",
+        "experiment": "BM25 + Gemini controlled keywords + logistic reranker",
         "split": "Devset first 50 conversations",
         "turns_evaluated": 400,
-        "ndcg@1": 0.0100,
-        "ndcg@10": 0.02586563444205212,
-        "ndcg@20": 0.03042129429837016,
-        "catalog_diversity": 0.036583034139916294,
-        "lexical_diversity": 0.4625166473342785,
+        "ndcg@1": 0.0325,
+        "ndcg@10": 0.11469899631494865,
+        "ndcg@20": 0.15177859138557978,
+        "catalog_diversity": 0.053217479977055934,
+        "lexical_diversity": 0.5275797855262313,
         "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "Uses only Gemini references 1 and 2. Corpus fields: track, artist, album.",
+        "source": "Latest local evaluator",
+        "note": "Current best local BM25 run. Gemini extracts controlled search terms; BM25 generates candidates; a logistic regression model learns the reranking weights.",
     },
     {
-        "experiment": "BERT + Gemini top-2 fusion, no tag_list/release_date, topk folder",
+        "experiment": "MiniLM + Gemini references + artist profile + decade",
         "split": "Devset first 50 conversations",
         "turns_evaluated": 400,
-        "ndcg@1": 0.0100,
-        "ndcg@10": 0.02586563444205212,
-        "ndcg@20": 0.03042129429837016,
-        "catalog_diversity": 0.036583034139916294,
-        "lexical_diversity": 0.46150862068965515,
+        "ndcg@1": 0.0375,
+        "ndcg@10": 0.07805621984489183,
+        "ndcg@20": 0.09567336416729033,
+        "catalog_diversity": 0.0687684561619681,
+        "lexical_diversity": 0.518107476635514,
         "total_catalog_size": 47071,
-        "source": "Local evaluator",
-        "note": "This result folder was named topk10, but the config still used topk=50. Config has now been fixed; rerun for a true topk=10 score.",
+        "source": "Latest local evaluator",
+        "note": "Best retained MiniLM-only embedding run for Streamlit: Gemini reference tracks are embedded against catalog metadata enriched with artist profile and release decade.",
     },
 ]
 
@@ -254,6 +164,26 @@ st.markdown(
     .small-muted {
         color: var(--muted);
         font-size: 0.92rem;
+    }
+    .router-box {
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.75rem 0.9rem;
+        margin-top: 0.8rem;
+    }
+    .router-box-label {
+        color: var(--muted);
+        font-size: 0.82rem;
+        margin-bottom: 0.25rem;
+    }
+    .router-box-value {
+        color: var(--ink);
+        font-size: 1rem;
+        font-weight: 600;
+        line-height: 1.35;
+        white-space: normal;
+        overflow-wrap: anywhere;
     }
     div[data-testid="stMetric"] {
         background: #ffffff;
@@ -379,74 +309,6 @@ def tag_overlap(gemini_tags, catalog_tags):
 
 
 @st.cache_data
-def load_gemini_table(path):
-    if not path.exists():
-        return pd.DataFrame()
-
-    df = pd.read_csv(path)
-    text_columns = [
-        column
-        for column in df.columns
-        if pd.api.types.is_object_dtype(df[column])
-        or pd.api.types.is_string_dtype(df[column])
-    ]
-    for column in text_columns:
-        df[column] = df[column].map(clean_text)
-
-    overlaps = df.apply(
-        lambda row: tag_overlap(row["gemini_tag_list"], row["catalog_tag_list"]),
-        axis=1,
-    )
-    df["tag_overlap_count"] = [x[0] for x in overlaps]
-    df["tag_overlap_terms"] = [x[1] for x in overlaps]
-    df["gemini_label"] = (
-        df["gemini_pseudo_rank"].astype(str)
-        + ". "
-        + df["gemini_track_name"].astype(str)
-        + " - "
-        + df["gemini_artist_name"].astype(str)
-    )
-    df["catalog_label"] = (
-        df["catalog_similarity_rank"].astype(str)
-        + ". "
-        + df["catalog_track_name"].astype(str)
-        + " - "
-        + df["catalog_artist_name"].astype(str)
-    )
-    return df
-
-
-@st.cache_data
-def load_devset_ground_truth_table(path):
-    if not path.exists():
-        return pd.DataFrame()
-
-    df = pd.read_csv(path)
-    text_columns = [
-        column
-        for column in df.columns
-        if pd.api.types.is_object_dtype(df[column])
-        or pd.api.types.is_string_dtype(df[column])
-    ]
-    for column in text_columns:
-        df[column] = df[column].map(clean_text)
-
-    df["gemini_label"] = (
-        df["gemini_reference_rank"].astype(str)
-        + ". "
-        + df["gemini_track_name"].astype(str)
-        + " - "
-        + df["gemini_artist_name"].astype(str)
-    )
-    df["ground_truth_label"] = (
-        df["ground_truth_track_name"].astype(str)
-        + " - "
-        + df["ground_truth_artist_name"].astype(str)
-    )
-    return df
-
-
-@st.cache_data
 def load_devset_conversations(path):
     if not path.exists():
         return {}
@@ -461,7 +323,54 @@ def load_devset_conversations(path):
 
 
 @st.cache_data
-def load_embedding_projection(path):
+def load_bm25_explanations(path):
+    if not path.exists():
+        return pd.DataFrame()
+
+    usecols = [
+        "session_id",
+        "turn_number",
+        "rank",
+        "track_name",
+        "artist_name",
+        "album_name",
+        "release_decade",
+        "is_ground_truth",
+        "route_types",
+        "keyword_json",
+        "final_bm25_query",
+        "matched_fields",
+        "matched_terms",
+        "matched_term_count",
+        "track_name_matches",
+        "artist_name_matches",
+        "album_name_matches",
+        "tag_list_matches",
+        "release_decade_matches",
+    ]
+    df = pd.read_csv(path, usecols=usecols)
+    text_columns = [
+        column
+        for column in df.columns
+        if pd.api.types.is_object_dtype(df[column])
+        or pd.api.types.is_string_dtype(df[column])
+    ]
+    for column in text_columns:
+        df[column] = df[column].map(clean_text)
+
+    df["turn_number"] = pd.to_numeric(df["turn_number"], errors="coerce").astype("Int64")
+    df["rank"] = pd.to_numeric(df["rank"], errors="coerce").astype("Int64")
+    df["matched_term_count"] = pd.to_numeric(
+        df["matched_term_count"],
+        errors="coerce",
+    ).fillna(0)
+    if "is_ground_truth" in df.columns:
+        df["is_ground_truth"] = df["is_ground_truth"].astype(str).str.lower().isin(["true", "1"])
+    return df
+
+
+@st.cache_data
+def load_minilm_explanations(path):
     if not path.exists():
         return pd.DataFrame()
 
@@ -476,16 +385,24 @@ def load_embedding_projection(path):
         df[column] = df[column].map(clean_text)
 
     if "turn_number" in df.columns:
-        turn_numbers = pd.to_numeric(df["turn_number"], errors="coerce").astype("Int64")
-        df["turn_number_key"] = turn_numbers.astype(str).replace("<NA>", "")
+        df["turn_number"] = pd.to_numeric(df["turn_number"], errors="coerce").astype("Int64")
+    if "rank" in df.columns:
+        df["rank_number"] = pd.to_numeric(df["rank"], errors="coerce")
     if "gemini_reference_rank" in df.columns:
-        ranks = pd.to_numeric(df["gemini_reference_rank"], errors="coerce").astype("Int64")
-        df["gemini_reference_rank_key"] = ranks.astype(str).replace("<NA>", "")
-    if "retrieved_rank" in df.columns:
-        ranks = pd.to_numeric(df["retrieved_rank"], errors="coerce").astype("Int64")
-        df["retrieved_rank_key"] = ranks.astype(str).replace("<NA>", "")
-
+        df["gemini_reference_rank_number"] = pd.to_numeric(df["gemini_reference_rank"], errors="coerce")
+    if "cosine_similarity" in df.columns:
+        df["cosine_similarity"] = pd.to_numeric(df["cosine_similarity"], errors="coerce")
+    if "is_ground_truth" in df.columns:
+        df["is_ground_truth"] = df["is_ground_truth"].astype(str).str.lower().isin(["true", "1"])
     return df
+
+
+@st.cache_data
+def load_score_json(path):
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8") as file:
+        return json.load(file)
 
 
 @st.cache_data
@@ -535,14 +452,17 @@ def format_metric(value, digits=4):
 
 
 def metric_grid(results):
-    best = results.sort_values("composite_score", ascending=False).iloc[0]
     best_ndcg = results.sort_values("ndcg@20", ascending=False).iloc[0]
     col1, col2, col3, col4 = st.columns(4)
 
-    col1.metric("Best composite score", format_metric(best["composite_score"]), best["experiment"])
+    if "composite_score" in results:
+        best = results.sort_values("composite_score", ascending=False).iloc[0]
+        col1.metric("Best composite score", format_metric(best["composite_score"]), best["experiment"])
+    else:
+        col1.metric("Models shown", len(results))
     col2.metric("Best nDCG@20", format_metric(best_ndcg["ndcg@20"]), best_ndcg["experiment"])
-    col3.metric("Experiments", len(results))
-    col4.metric("Best LLM judge score", format_metric(results["llm_judge_score"].max()))
+    col3.metric("Best nDCG@10", format_metric(results["ndcg@10"].max()) if "ndcg@10" in results else "n/a")
+    col4.metric("Best catalog diversity", format_metric(results["catalog_diversity"].max()) if "catalog_diversity" in results else "n/a")
 
 
 def render_header(title, caption):
@@ -634,70 +554,36 @@ def render_project_overview():
     st.markdown(
         """
         - Start with **Model Results** to see which retrieval strategies worked best.
-        - Use **Devset Case Study** to inspect one conversation turn where the ground truth is known.
-        - Use **Blindset Retrieval Explorer** to see how Gemini reference tracks map into nearby catalog regions.
+        - Use **MiniLM Explanation** to inspect the embedding-based Gemini experiments and example turns with known ground truth.
+        - Use **BM25 Explanation** to see how the current BM25 + Gemini keyword model builds and matches its query.
         """
     )
+
+    st.divider()
+    render_references()
 
 
 def render_model_results():
     render_header(
         "Model Results",
-        "Compare retrieval and response metrics for the model variants tested in this project.",
+        "Compare the final cleaned retrieval models kept for the project.",
     )
-    manual_df = pd.DataFrame(MANUAL_RESULTS).sort_values(
-        "composite_score",
-        ascending=False,
-    )
-    metric_grid(manual_df)
-
-    st.markdown("#### Blindset-A Codabench Scores")
-    st.caption(
-        "Official Blindset-A submission results. The true target tracks are hidden, so only aggregate metrics are available."
-    )
-    st.dataframe(manual_df, width="stretch", hide_index=True)
-
-    blind_metric = st.segmented_control(
-        "Compare models by",
-        ["composite_score", "ndcg@20", "llm_judge_score", "lexical_diversity", "catalog_diversity"],
-        default="composite_score",
-    )
-    blind_fig = px.bar(
-        manual_df.sort_values(blind_metric, ascending=False),
-        x=blind_metric,
-        y="experiment",
-        orientation="h",
-        color="experiment",
-        text=blind_metric,
-        title=f"Blind-A comparison by {blind_metric}",
-    )
-    blind_fig.update_traces(texttemplate="%{text:.4f}", textposition="outside")
-    blind_fig.update_layout(
-        height=520,
-        showlegend=False,
-        xaxis_title=blind_metric,
-        yaxis_title="",
-        yaxis=dict(autorange="reversed"),
-    )
-    st.plotly_chart(blind_fig, width="stretch")
 
     st.markdown("#### Devset Subset Scores")
     st.caption(
-        "Local evaluation on the first 50 conversations of TalkPlayData-Challenge-Dataset, "
-        "with all 8 turns evaluated per conversation. These scores are not directly comparable "
-        "to the Blindset-A Codabench results."
+        "Local evaluation on the first 50 conversations of TalkPlayData-Challenge-Dataset, with all 8 turns evaluated per conversation."
     )
     devset_df = pd.DataFrame(DEVSET_SUBSET_RESULTS)
+    metric_grid(devset_df)
     st.dataframe(devset_df, width="stretch", hide_index=True)
 
     st.markdown("#### Interpretation")
     st.markdown(
         """
         - For this challenge, the most important retrieval signal is nDCG@20: whether the exact target track appears in the top 20.
-        - BM25 + tag_list is the strongest current system, with the best nDCG@20 and composite score.
-        - Gemini can improve natural-language response quality, but it does not consistently improve exact hidden-track retrieval.
-        - BERT variants retrieve semantically plausible neighborhoods, but they are weak for this evaluation because nDCG@20 rewards exact track recovery.
-        - The most useful thesis comparison is BM25 vs BM25 + tag_list vs BERT/Gemini variants, because it shows the difference between lexical matching and semantic query drift.
+        - The current best local BM25 system uses Gemini as a controlled lexical query extractor and learns the reranker weights with logistic regression.
+        - Dense embedding variants retrieve semantically plausible neighborhoods, but they are weak for this evaluation because nDCG@20 rewards exact track recovery.
+        - The embedding model is kept for analysis and explainability, while the learned BM25 reranker is the strongest nDCG@20 model in this branch.
         """
     )
 
@@ -743,156 +629,6 @@ def render_prediction_explorer(prediction_options):
 
     st.markdown("#### Raw Row")
     st.json(row.to_dict())
-
-
-def render_gemini_analysis(df):
-    render_header(
-        "Blindset Retrieval Explorer",
-        "Inspect how Gemini-generated reference tracks map to nearby real catalog tracks in BERT embedding space.",
-    )
-    if df.empty:
-        st.warning("Gemini similarity table was not found.")
-        return
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Rows", len(df))
-    col2.metric("Sessions", df["session_id"].nunique())
-    col3.metric(
-        "Gemini references",
-        df[["session_id", "turn_number", "gemini_pseudo_rank"]].drop_duplicates().shape[0],
-    )
-    col4.metric("Avg similarity", format_metric(df["cosine_similarity"].mean()))
-
-    st.markdown(
-        """
-        **How to read this page.** Blindset-A does not reveal the correct target tracks, so this view cannot
-        say whether Gemini found the right answer. Instead, it diagnoses *where Gemini points retrieval*:
-        for each conversation turn, Gemini generated five reference songs, and this page shows their nearest
-        real catalog neighbors in BERT embedding space.
-        """
-    )
-
-    session_options = sorted(df["session_id"].dropna().unique())
-    selected_session = st.sidebar.selectbox("Session", session_options)
-    session_df = df[df["session_id"] == selected_session].copy()
-
-    turn_options = sorted(session_df["turn_number"].dropna().unique())
-    selected_turn = st.sidebar.selectbox("Turn", turn_options)
-    turn_df = session_df[session_df["turn_number"] == selected_turn].copy()
-
-    gemini_options = sorted(turn_df["gemini_label"].dropna().unique())
-    selected_gemini = st.sidebar.selectbox(
-        "Gemini-generated reference track",
-        gemini_options,
-        help="Choose one song suggested by Gemini. The nearest catalog matches below will update.",
-    )
-    selected_df = turn_df[turn_df["gemini_label"] == selected_gemini].copy()
-
-    min_similarity = st.sidebar.slider(
-        "Minimum cosine similarity",
-        float(df["cosine_similarity"].min()),
-        float(df["cosine_similarity"].max()),
-        float(df["cosine_similarity"].min()),
-        step=0.001,
-    )
-    selected_df = selected_df[selected_df["cosine_similarity"] >= min_similarity]
-
-    if selected_df.empty:
-        st.info("No catalog matches pass the current similarity filter.")
-        return
-
-    first_row = selected_df.iloc[0]
-    left, right = st.columns([1, 1.5])
-    with left:
-        st.markdown("#### Selected Gemini Reference")
-        st.write(f"Track: {first_row['gemini_track_name']}")
-        st.write(f"Artist: {first_row['gemini_artist_name']}")
-        st.write(f"Album: {first_row['gemini_album_name']}")
-        st.write(f"Release date: {first_row['gemini_release_date']}")
-    with right:
-        st.markdown("#### Extracted Tags")
-        st.info(first_row["gemini_tag_list"])
-
-    fig = px.bar(
-        selected_df.sort_values("catalog_similarity_rank"),
-        x="cosine_similarity",
-        y="catalog_label",
-        orientation="h",
-        color="tag_overlap_count",
-        hover_data=[
-            "catalog_track_id",
-            "catalog_album_name",
-            "catalog_tag_list",
-            "tag_overlap_terms",
-        ],
-        title="Nearest real catalog tracks by BERT cosine similarity",
-    )
-    fig.update_layout(
-        yaxis_title="Catalog track",
-        xaxis_title="Cosine similarity",
-        yaxis=dict(autorange="reversed"),
-        height=560,
-    )
-    st.plotly_chart(fig, width="stretch")
-
-    display_cols = [
-        "catalog_similarity_rank",
-        "cosine_similarity",
-        "catalog_track_id",
-        "catalog_track_name",
-        "catalog_artist_name",
-        "catalog_album_name",
-        "catalog_tag_list",
-        "tag_overlap_count",
-        "tag_overlap_terms",
-        "catalog_release_date",
-    ]
-    st.dataframe(
-        selected_df[display_cols].sort_values("catalog_similarity_rank"),
-        width="stretch",
-        hide_index=True,
-    )
-
-    st.markdown("#### All Gemini References For This Turn")
-    session_summary = (
-        turn_df.groupby(
-            ["gemini_pseudo_rank", "gemini_track_name", "gemini_artist_name"],
-            as_index=False,
-        )
-        .agg(
-            avg_similarity=("cosine_similarity", "mean"),
-            max_similarity=("cosine_similarity", "max"),
-            avg_tag_overlap=("tag_overlap_count", "mean"),
-            retrieved_catalog_tracks=("catalog_track_id", "nunique"),
-        )
-    )
-
-    fig2 = px.scatter(
-        session_summary,
-        x="avg_similarity",
-        y="avg_tag_overlap",
-        size="retrieved_catalog_tracks",
-        color="gemini_pseudo_rank",
-        hover_data=[
-            "gemini_track_name",
-            "gemini_artist_name",
-            "max_similarity",
-            "retrieved_catalog_tracks",
-        ],
-        title="Do the Gemini references point to the same catalog region?",
-    )
-    fig2.update_layout(
-        xaxis_title="Average cosine similarity to top catalog matches",
-        yaxis_title="Average tag overlap",
-        height=480,
-    )
-    st.plotly_chart(fig2, width="stretch")
-
-    st.dataframe(
-        session_summary.sort_values("gemini_pseudo_rank"),
-        width="stretch",
-        hide_index=True,
-    )
 
 
 def render_devset_conversation(detail):
@@ -978,7 +714,10 @@ def render_devset_conversation(detail):
     response_col, ranking_col = st.columns([1.15, 1])
     with response_col:
         st.markdown("##### Generated Response")
-        st.write(detail["predicted_response"])
+        if str(detail.get("predicted_response", "")).strip():
+            st.write(detail["predicted_response"])
+        else:
+            st.info("This artifact was generated from a retrieval-only run, so no Llama response was saved.")
 
     with ranking_col:
         st.markdown("##### Ranked Tracks")
@@ -996,142 +735,351 @@ def render_devset_conversation(detail):
         st.dataframe(ranking_table, width="stretch", hide_index=True, height=360)
 
 
-def render_devset_comparison(df, conversation_details):
+def parse_keyword_json(value):
+    try:
+        payload = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def split_terms(value):
+    return [term.strip() for term in str(value or "").split(",") if term.strip()]
+
+
+def unique_bm25_query_lines(query_text):
+    seen = set()
+    lines = []
+    for raw_line in str(query_text or "").splitlines():
+        line = raw_line.strip()
+        if not line or line in seen:
+            continue
+        seen.add(line)
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def format_router_route(route_types):
+    route = str(route_types or "none").strip()
+    labels = {
+        "artist": "Prioritize artist matches",
+        "title": "Prioritize track-title matches",
+        "album": "Prioritize album matches",
+        "decade": "Prioritize release-era matches",
+        "negative": "Avoid rejected terms",
+        "same_artist": "Prefer the same artist",
+        "none": "No special reranking",
+    }
+    parts = [part.strip() for part in route.split(",") if part.strip()]
+    if not parts:
+        return labels["none"]
+    return " + ".join(labels.get(part, part.replace("_", " ").title()) for part in parts)
+
+
+def parse_bool_value(value):
+    if isinstance(value, bool):
+        return value
+    if pd.isna(value):
+        return False
+    return str(value).strip().lower() in {"true", "1", "yes", "y"}
+
+
+def build_top20_retrieval_summary(df, session_col="session_id", turn_col="turn_number"):
+    if df.empty or "is_ground_truth" not in df.columns or "rank" not in df.columns:
+        return {}, pd.DataFrame()
+
+    rows = []
+    work_df = df.copy()
+    work_df["rank_number"] = pd.to_numeric(work_df["rank"], errors="coerce")
+    work_df["is_ground_truth_bool"] = work_df["is_ground_truth"].map(parse_bool_value)
+
+    for (session_id, turn_number), group in work_df.groupby([session_col, turn_col]):
+        top20 = group[group["rank_number"].between(1, 20, inclusive="both")]
+        hit_rows = top20[top20["is_ground_truth_bool"]].sort_values("rank_number")
+        if hit_rows.empty:
+            ground_truth_rank = None
+            ndcg = 0.0
+            rank_bucket = "Not in top 20"
+        else:
+            ground_truth_rank = int(hit_rows.iloc[0]["rank_number"])
+            ndcg = 1.0 / math.log2(ground_truth_rank + 1)
+            if ground_truth_rank == 1:
+                rank_bucket = "1"
+            elif ground_truth_rank <= 5:
+                rank_bucket = "2-5"
+            elif ground_truth_rank <= 10:
+                rank_bucket = "6-10"
+            else:
+                rank_bucket = "11-20"
+
+        rows.append(
+            {
+                "session_id": session_id,
+                "turn_number": turn_number,
+                "ground_truth_rank": ground_truth_rank,
+                "hit_at_20": ground_truth_rank is not None,
+                "ndcg_at_20": ndcg,
+                "rank_bucket": rank_bucket,
+            }
+        )
+
+    turn_metrics = pd.DataFrame(rows)
+    if turn_metrics.empty:
+        return {}, turn_metrics
+
+    summary = {
+        "turns": len(turn_metrics),
+        "ndcg_at_20": turn_metrics["ndcg_at_20"].mean(),
+        "hit_rate_at_20": turn_metrics["hit_at_20"].mean(),
+        "found": int(turn_metrics["hit_at_20"].sum()),
+        "missed": int((~turn_metrics["hit_at_20"]).sum()),
+    }
+    return summary, turn_metrics
+
+
+def render_bm25_explanation(df, conversation_details):
     render_header(
-        "Devset Case Study",
-        "Inspect conversations where the true target track is known, then compare Gemini references with that target.",
+        "BM25 Explanation",
+        "Inspect the lexical evidence behind BM25 retrieval and the query-type router.",
     )
     if df.empty:
-        st.warning("Devset Gemini ground-truth table was not found.")
+        st.warning("BM25 explanation data was not found.")
+        st.code(
+            "python refresh_streamlit_artifacts.py --run_dir exp/first_100/devset_bm25_gemini_keywords_query_type_router "
+            "--gemini_cache_dir cache/gemini_keywords_devset_first100 --projection_retrieval_type sentence_transformer "
+            "--corpus_types track_name artist_name album_name --topk_retrieved_per_reference 20",
+            language="powershell",
+        )
         return
-
-    session_turn_count = df[["session_id", "turn_number"]].drop_duplicates().shape[0]
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Rows", len(df))
-    col2.metric("Sessions", df["session_id"].nunique())
-    col3.metric("Evaluated turns", session_turn_count)
-    col4.metric("Avg tag overlap", format_metric(df["tag_overlap_count"].mean(), digits=2))
 
     st.markdown(
         """
-        **How to read this page.** The devset contains known ground-truth tracks, so it can be used as a
-        controlled case study. For each selected turn, you can inspect the conversation, the model response,
-        where the correct track appeared in the top 20, and whether Gemini's generated reference songs share
-        metadata tags with the true target.
+        **How to read this page.** BM25 is not an embedding model, so the useful visualization is not a 2D semantic map.
+        This view explains the lexical matching process: Gemini extracts controlled search terms, BM25 retrieves
+        catalog tracks whose metadata contains those terms, and the query-type router only changes the order for
+        clear artist/title/album/decade/negative-intent cases.
         """
     )
+
+    turn_count = df[["session_id", "turn_number"]].drop_duplicates().shape[0]
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Explanation rows", len(df))
+    col2.metric("Evaluated turns", turn_count)
+    col3.metric("Avg matched terms", format_metric(df["matched_term_count"].mean(), digits=2))
+    col4.metric("Ground-truth rows", int(df["is_ground_truth"].sum()))
+
+    retrieval_summary, turn_metrics = build_top20_retrieval_summary(df)
+    if retrieval_summary:
+        st.markdown("#### Retrieval Quality Summary")
+        st.caption(
+            "Overall performance for this exported devset run: whether the correct track appears in the top 20, "
+            "and how high it is ranked when it appears."
+        )
+        metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+        metric_col1.metric("nDCG@20", f"{retrieval_summary['ndcg_at_20']:.4f}")
+        metric_col2.metric("Hit rate@20", f"{retrieval_summary['hit_rate_at_20']:.1%}")
+        metric_col3.metric("Target found", f"{retrieval_summary['found']}/{retrieval_summary['turns']}")
+        metric_col4.metric("Target missed", f"{retrieval_summary['missed']}")
+
+        rank_order = ["1", "2-5", "6-10", "11-20", "Not in top 20"]
+        rank_distribution = (
+            turn_metrics["rank_bucket"]
+            .value_counts()
+            .reindex(rank_order, fill_value=0)
+            .rename_axis("ground_truth_rank")
+            .reset_index(name="turns")
+        )
+        rank_distribution["share"] = rank_distribution["turns"] / retrieval_summary["turns"]
+        fig = px.bar(
+            rank_distribution,
+            x="ground_truth_rank",
+            y="turns",
+            text=rank_distribution["share"].map(lambda value: f"{value:.1%}"),
+            title="Ground-truth rank distribution",
+        )
+        fig.update_traces(marker_color="#2f80c4", textposition="outside")
+        fig.update_layout(
+            height=360,
+            xaxis_title="Where the correct track appeared",
+            yaxis_title="Conversation turns",
+            showlegend=False,
+        )
+        st.plotly_chart(fig, width="stretch")
 
     session_options = sorted(df["session_id"].dropna().unique())
     selected_session = st.sidebar.selectbox(
         "Session",
         session_options,
-        key="devset_session",
+        key="bm25_session",
     )
     session_df = df[df["session_id"] == selected_session].copy()
-
-    turn_options = sorted(session_df["turn_number"].dropna().unique())
+    turn_options = sorted(session_df["turn_number"].dropna().unique(), key=int)
     selected_turn = st.sidebar.selectbox(
         "Turn",
         turn_options,
-        key="devset_turn",
+        key="bm25_turn",
     )
-    turn_df = session_df[session_df["turn_number"] == selected_turn].copy()
+    turn_df = session_df[session_df["turn_number"] == selected_turn].sort_values("rank").copy()
+    if turn_df.empty:
+        st.info("No BM25 explanation rows are available for this turn.")
+        return
 
-    selected_detail = conversation_details.get((selected_session, int(selected_turn)))
-    first_row = turn_df.sort_values("gemini_reference_rank").iloc[0]
+    detail = conversation_details.get((selected_session, int(selected_turn)))
+    render_devset_conversation(detail)
 
-    render_devset_conversation(selected_detail)
+    first_row = turn_df.iloc[0]
+    keyword_payload = parse_keyword_json(first_row.get("keyword_json", "{}"))
+    route_types = first_row.get("route_types", "none")
 
-    st.markdown("#### Target Track And Gemini References")
-    st.markdown("##### Ground-Truth Track")
-    target_col1, target_col2, target_col3, target_col4 = st.columns([1, 1, 1.5, 1])
-    target_col1.write(f"Track: {first_row['ground_truth_track_name']}")
-    target_col2.write(f"Artist: {first_row['ground_truth_artist_name']}")
-    target_col3.write(f"Album: {first_row['ground_truth_album_name']}")
-    target_col4.write(f"Release date: {first_row['ground_truth_release_date']}")
-    st.info(first_row["ground_truth_tag_list"])
-
-    st.markdown("##### Gemini-Generated Reference Tracks")
+    st.markdown("#### Controlled Query")
     st.caption(
-        "Gemini produced these five reference songs as query-expansion clues. "
-        "They are not final recommendations; they help explain where Gemini tried to steer retrieval."
+        "This shows how the user's conversation is converted into BM25 search terms. Gemini extracts structured "
+        "music clues, then the model searches the catalog for metadata that contains those clues."
     )
-    reference_display = turn_df[
-        [
-            "gemini_reference_rank",
-            "gemini_track_name",
-            "gemini_artist_name",
-            "gemini_album_name",
-            "gemini_tag_list",
-            "tag_overlap_count",
-            "tag_overlap_terms",
+    left, right = st.columns([1, 1])
+    with left:
+        st.markdown("##### Gemini Extracted Fields")
+        st.caption("The useful entities and descriptors Gemini found in the conversation.")
+        keyword_rows = [
+            {"field": field, "values": ", ".join(values) if isinstance(values, list) else ""}
+            for field, values in keyword_payload.items()
+            if values
         ]
-    ].sort_values("gemini_reference_rank")
-    st.dataframe(reference_display, width="stretch", hide_index=True, height=260)
-
-    st.markdown("#### Five Gemini References Compared With The Target")
-    fig = px.bar(
-        turn_df.sort_values("gemini_reference_rank"),
-        x="tag_overlap_count",
-        y="gemini_label",
-        orientation="h",
-        text="tag_overlap_count",
-        color="tag_overlap_count",
-        hover_data=[
-            "gemini_tag_list",
-            "tag_overlap_terms",
-            "ground_truth_track_name",
-            "ground_truth_artist_name",
-        ],
-        title="Exact tag overlap with the ground-truth track",
-    )
-    fig.update_layout(
-        height=420,
-        xaxis_title="Number of shared tags",
-        yaxis_title="Gemini-generated reference track",
-        yaxis=dict(autorange="reversed"),
-    )
-    st.plotly_chart(fig, width="stretch")
-
-    display_columns = [
-        "gemini_reference_rank",
-        "gemini_track_name",
-        "gemini_artist_name",
-        "gemini_tag_list",
-        "tag_overlap_count",
-        "tag_overlap_terms",
-        "ground_truth_track_name",
-        "ground_truth_artist_name",
-    ]
-    st.dataframe(
-        turn_df[display_columns].sort_values("gemini_reference_rank"),
-        width="stretch",
-        hide_index=True,
-    )
-
-    st.markdown("#### Global Devset Tag Alignment")
-    per_reference = (
-        df.groupby("gemini_reference_rank", as_index=False)
-        .agg(
-            average_tag_overlap=("tag_overlap_count", "mean"),
-            turns_with_overlap=("tag_overlap_count", lambda values: int((values > 0).sum())),
+        st.dataframe(pd.DataFrame(keyword_rows), width="stretch", hide_index=True, height=240)
+    with right:
+        st.markdown("##### BM25 Query Terms")
+        st.caption("The final readable search terms sent to BM25.")
+        st.code(unique_bm25_query_lines(first_row.get("final_bm25_query", "")), language="text")
+        router_decision = html.escape(format_router_route(route_types))
+        st.markdown(
+            f"""
+            <div class="router-box">
+                <div class="router-box-label">Ranking focus</div>
+                <div class="router-box-value">{router_decision}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
+        st.caption(
+            "This indicates which metadata clues the model decided to prioritize when ordering the retrieved tracks."
+        )
+
+    st.markdown("#### Top-20 Retrieval Evidence")
+    st.caption(
+        "The final ranked tracks for this turn. The match columns show which Gemini/BM25 terms were found in each "
+        "track's metadata, and the ground_truth column marks the correct answer when it appears."
     )
-    global_fig = px.bar(
-        per_reference,
-        x="gemini_reference_rank",
-        y="average_tag_overlap",
-        text="average_tag_overlap",
-        title="Average ground-truth tag overlap by Gemini reference position",
+    display_table = turn_df[
+        [
+            "rank",
+            "track_name",
+            "artist_name",
+            "album_name",
+            "release_decade",
+            "matched_term_count",
+            "matched_fields",
+            "matched_terms",
+            "is_ground_truth",
+        ]
+    ].rename(
+        columns={
+            "track_name": "track",
+            "artist_name": "artist",
+            "album_name": "album",
+            "release_decade": "decade",
+            "matched_term_count": "matched_terms_n",
+            "is_ground_truth": "ground_truth",
+        }
     )
-    global_fig.update_traces(texttemplate="%{text:.2f}", textposition="outside")
-    global_fig.update_layout(
-        height=400,
-        xaxis_title="Gemini reference rank",
-        yaxis_title="Average shared tags",
+    st.dataframe(display_table, width="stretch", hide_index=True, height=420)
+
+    st.markdown("#### Matched-Term Matrix")
+    st.caption(
+        "A compact yes/no view of which query terms matched each retrieved track. It helps explain why BM25 placed "
+        "certain tracks in the ranking."
     )
-    st.plotly_chart(global_fig, width="stretch")
-    st.dataframe(per_reference, width="stretch", hide_index=True)
+    selected_terms = []
+    for field in [
+        "track_titles",
+        "artists",
+        "albums",
+        "genres",
+        "moods",
+        "instruments",
+        "themes",
+        "era",
+        "must_include_terms",
+        "avoid_terms",
+    ]:
+        values = keyword_payload.get(field, [])
+        if isinstance(values, list):
+            selected_terms.extend(str(value).strip().lower() for value in values if str(value).strip())
+    selected_terms = list(dict.fromkeys(selected_terms))[:24]
+
+    if not selected_terms:
+        st.info("No Gemini keyword terms were exported for this turn.")
+    else:
+        matrix_rows = []
+        for row in turn_df.itertuples(index=False):
+            matched = {term.lower() for term in split_terms(row.matched_terms)}
+            matrix_row = {
+                "rank": int(row.rank),
+                "track": row.track_name,
+                "artist": row.artist_name,
+                "matches": int(row.matched_term_count),
+            }
+            for term in selected_terms:
+                matrix_row[term] = "yes" if term in matched else ""
+            matrix_rows.append(matrix_row)
+
+        matrix_df = pd.DataFrame(matrix_rows)
+        term_columns = [term for term in selected_terms if term in matrix_df.columns]
+        st.dataframe(
+            matrix_df,
+            width="stretch",
+            hide_index=True,
+            height=520,
+            column_config={
+                "rank": st.column_config.NumberColumn("rank", width="small"),
+                "track": st.column_config.TextColumn("track", width="medium"),
+                "artist": st.column_config.TextColumn("artist", width="medium"),
+                "matches": st.column_config.NumberColumn("matches", width="small"),
+                **{
+                    term: st.column_config.TextColumn(term, width="small")
+                    for term in term_columns
+                },
+            },
+        )
+
+    st.markdown("#### Field Match Breakdown")
+    st.caption(
+        "A summary of where the matches came from: track title, artist, album, tags, or release decade."
+    )
+    field_columns = [
+        "track_name_matches",
+        "artist_name_matches",
+        "album_name_matches",
+        "tag_list_matches",
+        "release_decade_matches",
+    ]
+    field_summary = []
+    for column in field_columns:
+        field_summary.append(
+            {
+                "field": column.replace("_matches", ""),
+                "tracks_with_match": int(turn_df[column].fillna("").astype(str).str.len().gt(0).sum()),
+                "all_matched_terms": ", ".join(
+                    sorted(
+                        {
+                            term
+                            for value in turn_df[column].fillna("")
+                            for term in split_terms(value)
+                        }
+                    )
+                ),
+            }
+        )
+    st.dataframe(pd.DataFrame(field_summary), width="stretch", hide_index=True)
 
 
 def build_oracle_rows(ground_truth_df, retrieved_df, k_values):
@@ -1330,7 +1278,7 @@ def render_oracle_check(ground_truth_df, gemini_df, retrieved_df, selected_sessi
     metric_col1.metric("Evaluated turns", f"{total_turns}")
     metric_col2.metric("Target found", f"{hit_turns}")
     metric_col3.metric("Target missed", f"{miss_turns}")
-    metric_col4.metric("Upper-limit success", f"{hit_rate:.1%}")
+    metric_col4.metric("Target reachable rate", f"{hit_rate:.1%}")
 
     found_missed = pd.DataFrame(
         [
@@ -1449,8 +1397,150 @@ def render_oracle_check(ground_truth_df, gemini_df, retrieved_df, selected_sessi
         )
     else:
         reference_summary["best_ground_truth_rank"] = None
-    reference_summary["best_ground_truth_rank"] = reference_summary["best_ground_truth_rank"].fillna("not found")
+    rank_values = pd.to_numeric(
+        reference_summary["best_ground_truth_rank"],
+        errors="coerce",
+    )
+    reference_summary["best_ground_truth_rank"] = (
+        rank_values.astype("Int64").astype(str).replace("<NA>", "not found")
+    )
     st.dataframe(reference_summary, width="stretch", hide_index=True)
+
+
+def render_minilm_explanation(df, conversation_details, scores):
+    render_header(
+        "MiniLM Explanation",
+        "Inspect the MiniLM embedding model without PCA or UMAP projection.",
+    )
+    if df.empty:
+        st.warning("MiniLM explanation data was not found.")
+        st.code(
+            "python export_minilm_explanation_to_csv.py "
+            "--run_dir exp/first_100/devset_gemini_multiquery_minilm_streamlit_top20 "
+            "--gemini_cache_dir cache/gemini_expansions_devset_first100 "
+            "--output_csv visualize_streamlit/minilm_reference_retrieval_table.csv "
+            "--topk_retrieved_per_reference 20 "
+            "--corpus_types track_name artist_name album_name artist_style_profile release_decade "
+            "--device cuda",
+            language="powershell",
+        )
+        return
+
+    st.markdown(
+        """
+        **How to read this page.** Gemini first proposes five reference tracks from the conversation.
+        Each reference track is embedded with MiniLM using the same catalog metadata fields:
+        track, artist, album, artist style profile, and release decade. The tables below show the final
+        top-20 recommendation list and the nearest catalog tracks retrieved from each Gemini reference.
+        """
+    )
+
+    final_df = df[df["row_type"] == "final_recommendation"].copy()
+    ground_truth_df = df[df["row_type"] == "ground_truth"].copy()
+    reference_df = df[df["row_type"] == "gemini_reference"].copy()
+    retrieved_df = df[df["row_type"] == "retrieved_from_reference"].copy()
+
+    hit_rows = final_df[final_df["is_ground_truth"]]
+    found_turns = hit_rows[["session_id", "turn_number"]].drop_duplicates()
+    total_turns = ground_truth_df[["session_id", "turn_number"]].drop_duplicates()
+    missing_count = max(len(total_turns) - len(found_turns), 0)
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("nDCG@20", format_metric(scores.get("ndcg@20")))
+    col2.metric("Ground truth found", len(found_turns))
+    col3.metric("Missing from top 20", missing_count)
+    col4.metric("Turns evaluated", int(scores.get("subset_turns", len(total_turns))))
+
+    session_options = sorted(reference_df["session_id"].dropna().unique())
+    if not session_options:
+        st.info("No Gemini reference tracks are available in the MiniLM explanation table.")
+        return
+
+    selected_session = st.sidebar.selectbox("Session", session_options, key="minilm_session")
+    session_turns = reference_df[reference_df["session_id"] == selected_session]["turn_number"].dropna().unique()
+    turn_options = sorted([int(turn) for turn in session_turns])
+    selected_turn = st.sidebar.selectbox("Turn", turn_options, key="minilm_turn")
+
+    key_filter = (df["session_id"] == selected_session) & (df["turn_number"] == selected_turn)
+    turn_final = final_df[key_filter].sort_values("rank_number").copy()
+    turn_ground_truth = ground_truth_df[key_filter].copy()
+    turn_references = reference_df[key_filter].sort_values("gemini_reference_rank_number").copy()
+    turn_retrieved = retrieved_df[key_filter].sort_values(
+        ["gemini_reference_rank_number", "rank_number"]
+    ).copy()
+
+    detail = conversation_details.get((selected_session, int(selected_turn)))
+    render_devset_conversation(detail)
+
+    st.markdown("#### Ground Truth And Gemini References")
+    summary_rows = []
+    for row in turn_ground_truth.itertuples(index=False):
+        summary_rows.append(
+            {
+                "type": "Ground truth",
+                "rank": "",
+                "track": row.track_name,
+                "artist": row.artist_name,
+                "album": row.album_name,
+                "tags": row.tag_list,
+            }
+        )
+    for row in turn_references.itertuples(index=False):
+        summary_rows.append(
+            {
+                "type": "Gemini reference",
+                "rank": int(row.gemini_reference_rank_number),
+                "track": row.track_name,
+                "artist": row.artist_name,
+                "album": row.album_name,
+                "tags": row.tag_list,
+            }
+        )
+    st.dataframe(pd.DataFrame(summary_rows), width="stretch", hide_index=True)
+
+    st.markdown("#### Final Top-20 Recommendations")
+    final_table = turn_final[
+        ["rank", "track_name", "artist_name", "album_name", "tag_list", "is_ground_truth"]
+    ].rename(
+        columns={
+            "track_name": "track",
+            "artist_name": "artist",
+            "album_name": "album",
+            "tag_list": "tags",
+        }
+    )
+    st.dataframe(final_table, width="stretch", hide_index=True, height=420)
+
+    st.markdown("#### MiniLM Nearest Tracks For Each Gemini Reference")
+    st.caption("Each table shows the catalog tracks retrieved from one Gemini-generated reference song before final fusion.")
+    if turn_retrieved.empty:
+        st.info("No per-reference MiniLM retrieval rows are available for this turn.")
+        return
+
+    ground_truth_id = turn_ground_truth.iloc[0]["track_id"] if not turn_ground_truth.empty else None
+    reference_labels = {
+        int(row.gemini_reference_rank_number): f"{int(row.gemini_reference_rank_number)}. {row.track_name} - {row.artist_name}"
+        for row in turn_references.itertuples(index=False)
+    }
+    for reference_rank, reference_rows in turn_retrieved.groupby("gemini_reference_rank_number"):
+        reference_rows = reference_rows.sort_values("rank_number").copy()
+        found = reference_rows[reference_rows["track_id"] == ground_truth_id]
+        status = "target not found"
+        if not found.empty:
+            status = f"target found at rank {int(found['rank_number'].min())}"
+        label = reference_labels.get(int(reference_rank), f"Gemini reference {int(reference_rank)}")
+        with st.expander(f"{label} - {status}"):
+            table = reference_rows[
+                ["rank", "cosine_similarity", "track_name", "artist_name", "album_name", "tag_list", "is_ground_truth"]
+            ].rename(
+                columns={
+                    "track_name": "track",
+                    "artist_name": "artist",
+                    "album_name": "album",
+                    "tag_list": "tags",
+                }
+            )
+            st.dataframe(table, width="stretch", hide_index=True, height=min(420, 84 + 36 * len(table)))
 
 
 def render_embedding_map(df, conversation_details):
@@ -1459,31 +1549,23 @@ def render_embedding_map(df, conversation_details):
         "Place Gemini-generated reference tracks inside the catalog embedding space.",
     )
     if df.empty:
-        st.warning("Embedding projection data was not found.")
-        st.write(
-            "Create it after the matching BERT cache exists. This is an offline step, so Streamlit stays lightweight."
-        )
-        st.code(
-            "python create_gemini_embedding_projection.py "
-            "--gemini_cache_dir ./cache/gemini_expansions_devset_first100",
-            language="powershell",
-        )
+        st.warning("This retired embedding-map view has no projection data.")
         return
 
     st.markdown(
         """
         **How to read this page.** The gray cloud is the real challenge catalog projected from retrieval embeddings
-        into two UMAP dimensions. The highlighted points show the selected turn's ground-truth track and the five
-        Gemini-generated reference tracks. If the Gemini points are far from the ground truth, that is visual evidence
-        of query drift.
+        into two dimensions. The highlighted points show the selected turn's ground-truth track and the five
+        Gemini-generated reference tracks. If the Gemini points are far from the ground truth, that can indicate
+        query drift, but the actual retrieval decision is still made in the original embedding space.
 
-        UMAP is used because this page focuses on local neighborhoods: whether Gemini references, retrieved tracks,
-        final recommendations, and ground-truth tracks appear near each other. Retrieval is still computed in the
-        original embedding space, not directly from this 2D map.
+        PCA is the recommended view for thesis explanation because it is more stable and preserves broad global
+        structure. UMAP is available as an exploratory local-neighborhood view, but it can exaggerate or compress
+        distances in ways that are visually misleading.
 
         The final top-20 recommendations, Gemini references, and embedding projection are loaded from exported
         dashboard files. After running a new model, refresh those files with `refresh_streamlit_artifacts.py`
-        so this page and the Devset Case Study page describe the same run.
+        so this page describes the latest exported embedding run.
         """
     )
 
@@ -1516,13 +1598,27 @@ def render_embedding_map(df, conversation_details):
         "bert": "BERT",
         "sentence_transformer": "MiniLM sentence-transformer",
     }.get(projection_type, projection_type)
-    projection_method = (
-        df["projection_method"].dropna().astype(str).iloc[0]
-        if "projection_method" in df.columns and not df["projection_method"].dropna().empty
-        else "umap" if {"umap_x", "umap_y"}.issubset(df.columns) else "pca"
+    available_projection_methods = []
+    if {"pca_x", "pca_y"}.issubset(df.columns):
+        available_projection_methods.append("pca")
+    if {"umap_x", "umap_y"}.issubset(df.columns):
+        available_projection_methods.append("umap")
+    if not available_projection_methods:
+        st.warning("The projection CSV does not contain usable 2D coordinates.")
+        return
+    default_projection_index = 0
+    projection_method = st.sidebar.selectbox(
+        "Map projection",
+        available_projection_methods,
+        index=default_projection_index,
+        format_func=lambda value: {
+            "pca": "PCA - stable thesis view",
+            "umap": "UMAP - exploratory local view",
+        }.get(value, value.upper()),
+        key="embedding_projection_method",
     )
-    x_coord = "umap_x" if "umap_x" in df.columns else "pca_x"
-    y_coord = "umap_y" if "umap_y" in df.columns else "pca_y"
+    x_coord = f"{projection_method}_x"
+    y_coord = f"{projection_method}_y"
     projection_method_label = projection_method.upper()
     st.caption(
         f"Projection: {projection_method_label} using {projection_label}. Corpus fields: {projection_fields}."
@@ -1627,12 +1723,12 @@ def render_embedding_map(df, conversation_details):
 
     fig = go.Figure()
     fig.add_trace(
-        go.Scattergl(
+        go.Scatter(
             x=visible_catalog[x_coord],
             y=visible_catalog[y_coord],
             mode="markers",
             name="Catalog tracks",
-            marker=dict(size=4, color="#c7cbd1", opacity=0.28),
+            marker=dict(size=3, color="#c7cbd1", opacity=0.16),
             text=visible_catalog["track_name"] + " - " + visible_catalog["artist_name"],
             customdata=visible_catalog[["album_name", "broad_genre"]],
             hovertemplate=(
@@ -1642,23 +1738,6 @@ def render_embedding_map(df, conversation_details):
             ),
         )
     )
-
-    if not turn_ground_truth.empty:
-        fig.add_trace(
-            go.Scatter(
-                x=turn_ground_truth[x_coord],
-                y=turn_ground_truth[y_coord],
-                mode="markers",
-                name="Ground-truth track",
-                marker=dict(size=18, color="#2364aa", symbol="star", line=dict(width=1, color="#ffffff")),
-                text=turn_ground_truth["track_name"] + " - " + turn_ground_truth["artist_name"],
-                customdata=turn_ground_truth[["album_name"]],
-                hovertemplate=(
-                    "<b>%{text}</b><br>"
-                    "Album: %{customdata[0]}<extra></extra>"
-                ),
-            )
-        )
 
     if not final_recommendations_df.empty:
         fig.add_trace(
@@ -1745,6 +1824,23 @@ def render_embedding_map(df, conversation_details):
             )
         )
 
+    if not turn_ground_truth.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=turn_ground_truth[x_coord],
+                y=turn_ground_truth[y_coord],
+                mode="markers",
+                name="Ground-truth track",
+                marker=dict(size=20, color="#2364aa", symbol="star", line=dict(width=2, color="#ffffff")),
+                text=turn_ground_truth["track_name"] + " - " + turn_ground_truth["artist_name"],
+                customdata=turn_ground_truth[["album_name"]],
+                hovertemplate=(
+                    "<b>%{text}</b><br>"
+                    "Album: %{customdata[0]}<extra></extra>"
+                ),
+            )
+        )
+
     fig.update_layout(
         title=f"{projection_method_label} map of {projection_label} metadata embeddings",
         height=660,
@@ -1785,7 +1881,7 @@ def render_embedding_map(df, conversation_details):
 
     st.markdown("#### Final Top-20 Recommendations")
     st.caption(
-        f"These are the final model recommendations shown in the Devset Case Study page, projected onto the same {projection_method_label} map."
+        f"These are the final model recommendations for the selected turn, projected onto the same {projection_method_label} map."
     )
     if final_recommendations_df.empty:
         st.info("No final recommendation details are available for this selected turn.")
@@ -1860,60 +1956,6 @@ def render_embedding_map(df, conversation_details):
                 )
 
 
-def render_global_gemini(df):
-    st.subheader("Global Blindset Similarity")
-    if df.empty:
-        st.warning("Gemini similarity table was not found.")
-        return
-
-    fig = px.histogram(
-        df,
-        x="cosine_similarity",
-        nbins=40,
-        title="Distribution of Gemini reference-track to catalog-track similarity",
-    )
-    fig.update_layout(
-        xaxis_title="Cosine similarity",
-        yaxis_title="Count",
-        height=420,
-    )
-    st.plotly_chart(fig, width="stretch")
-
-    pseudo_summary = (
-        df.groupby(
-            [
-                "session_id",
-                "turn_number",
-                "gemini_pseudo_rank",
-                "gemini_track_name",
-                "gemini_artist_name",
-            ],
-            as_index=False,
-        )
-        .agg(
-            avg_similarity=("cosine_similarity", "mean"),
-            max_similarity=("cosine_similarity", "max"),
-            avg_tag_overlap=("tag_overlap_count", "mean"),
-        )
-    )
-
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.markdown("#### Highest Average Similarity")
-        st.dataframe(
-            pseudo_summary.sort_values("avg_similarity", ascending=False).head(10),
-            width="stretch",
-            hide_index=True,
-        )
-    with col_b:
-        st.markdown("#### Lowest Average Similarity")
-        st.dataframe(
-            pseudo_summary.sort_values("avg_similarity", ascending=True).head(10),
-            width="stretch",
-            hide_index=True,
-        )
-
-
 def render_references():
     st.subheader("Challenge References")
     for label, url in REFERENCE_LINKS.items():
@@ -1934,12 +1976,15 @@ def set_active_page(page):
 
 
 def main():
-    gemini_df = load_gemini_table(CSV_PATH)
-    devset_gemini_df = load_devset_ground_truth_table(DEVSET_GEMINI_PATH)
-    devset_conversations = load_devset_conversations(DEVSET_CONVERSATION_PATH)
-    embedding_projection_df = load_embedding_projection(EMBEDDING_PROJECTION_PATH)
-
+    valid_pages = {
+        "Project Overview",
+        "Model Results",
+        "MiniLM Explanation",
+        "BM25 Explanation",
+    }
     if "active_page" not in st.session_state:
+        st.session_state.active_page = "Project Overview"
+    elif st.session_state.active_page not in valid_pages:
         st.session_state.active_page = "Project Overview"
 
     with st.sidebar:
@@ -1959,25 +2004,18 @@ def main():
             args=("Model Results",),
         )
         st.button(
-            "Devset Case Study",
+            "MiniLM Explanation",
             width="stretch",
-            type="primary" if st.session_state.active_page == "Devset Case Study" else "secondary",
+            type="primary" if st.session_state.active_page == "MiniLM Explanation" else "secondary",
             on_click=set_active_page,
-            args=("Devset Case Study",),
+            args=("MiniLM Explanation",),
         )
         st.button(
-            "Devset Embedding Map",
+            "BM25 Explanation",
             width="stretch",
-            type="primary" if st.session_state.active_page == "Devset Embedding Map" else "secondary",
+            type="primary" if st.session_state.active_page == "BM25 Explanation" else "secondary",
             on_click=set_active_page,
-            args=("Devset Embedding Map",),
-        )
-        st.button(
-            "Blindset Retrieval Explorer",
-            width="stretch",
-            type="primary" if st.session_state.active_page == "Blindset Retrieval Explorer" else "secondary",
-            on_click=set_active_page,
-            args=("Blindset Retrieval Explorer",),
+            args=("BM25 Explanation",),
         )
 
         page = st.session_state.active_page
@@ -1986,25 +2024,22 @@ def main():
             st.caption("Start here for the challenge goal, data, and model families.")
         elif page == "Model Results":
             st.caption("Compare model performance and understand each metric.")
-        elif page == "Devset Case Study":
-            st.caption("Inspect conversations with known target tracks.")
-        elif page == "Devset Embedding Map":
-            st.caption("See Gemini references and target tracks inside the BERT embedding space.")
-        else:
-            st.caption("Explore Gemini references against nearby catalog tracks.")
+        elif page == "MiniLM Explanation":
+            st.caption("Inspect MiniLM references, final recommendations, and per-reference retrieval tables.")
+        elif page == "BM25 Explanation":
+            st.caption("Inspect controlled BM25 query terms, matches, and router evidence.")
 
     if page == "Project Overview":
         render_project_overview()
-    elif page == "Blindset Retrieval Explorer":
-        render_gemini_analysis(gemini_df)
-        st.divider()
-        render_global_gemini(gemini_df)
-        st.divider()
-        render_references()
-    elif page == "Devset Case Study":
-        render_devset_comparison(devset_gemini_df, devset_conversations)
-    elif page == "Devset Embedding Map":
-        render_embedding_map(embedding_projection_df, devset_conversations)
+    elif page == "MiniLM Explanation":
+        minilm_explanation_df = load_minilm_explanations(MINILM_EXPLANATION_PATH)
+        devset_conversations = load_devset_conversations(DEVSET_CONVERSATION_PATH)
+        minilm_scores = load_score_json(MINILM_SCORES_PATH)
+        render_minilm_explanation(minilm_explanation_df, devset_conversations, minilm_scores)
+    elif page == "BM25 Explanation":
+        bm25_explanation_df = load_bm25_explanations(BM25_EXPLANATION_PATH)
+        devset_conversations = load_devset_conversations(DEVSET_CONVERSATION_PATH)
+        render_bm25_explanation(bm25_explanation_df, devset_conversations)
     else:
         render_model_results()
 

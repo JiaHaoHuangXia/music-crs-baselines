@@ -24,7 +24,7 @@ class LLAMA_MODEL:
         chat_template = self.tokenizer.apply_chat_template(chat_data, tokenize=False, add_generation_prompt=True)
         return chat_template
 
-    def response_generation(self, sys_prompt: str, chat_history: list, recommend_item: str,max_new_tokens=512, response_format=None):
+    def response_generation(self, sys_prompt: str, chat_history: list, recommend_item: str,max_new_tokens=64, response_format=None):
         chat_history = self._format_chat_history(sys_prompt, chat_history, recommend_item)
         token_inputs = self.tokenizer(chat_history, return_tensors="pt")
         input_ids = token_inputs.input_ids.to(self.device)
@@ -34,7 +34,7 @@ class LLAMA_MODEL:
         generated_text = self.tokenizer.batch_decode(outputs[:,input_ids.shape[1]:], skip_special_tokens=True)[0]
         return generated_text
 
-    def batch_response_generation(self, sys_prompts: list[str], chat_histories: list[list], recommend_items: list[str], max_new_tokens=128):
+    def batch_response_generation(self, sys_prompts: list[str], chat_histories: list[list], recommend_items: list[str], max_new_tokens=64):
         """Generate responses for multiple inputs in batch.
 
         Args:

@@ -1,0 +1,35 @@
+{
+  "model_type": "logistic_regression_query_type_reranker",
+  "base_tid": "devset_bm25_gemini_keywords_query_type_router",
+  "num_rows": 50,
+  "feature_names": [
+    "reciprocal_rank",
+    "title_match",
+    "artist_match",
+    "same_artist_match",
+    "album_match",
+    "decade_match",
+    "negative_match"
+  ],
+  "intercept": -0.5860117264711813,
+  "weights": {
+    "reciprocal_rank": 5.615244202256627,
+    "title_match": -1.453691333455759,
+    "artist_match": 1.0082737216887865,
+    "same_artist_match": 0.1347523931180237,
+    "album_match": 2.264436152292725,
+    "decade_match": -0.7631111097207288,
+    "negative_match": 0.05319246575178775
+  },
+  "training_diagnostics": {
+    "candidate_topk": 100,
+    "training_examples": 40000,
+    "positives": 220,
+    "negatives": 39780,
+    "turns": 400,
+    "turns_with_positive_candidate": 220,
+    "candidate_recall": 0.55
+  },
+  "train_average_precision": 0.021061825363343233,
+  "train_roc_auc": 0.779716680378445
+}
