@@ -4,33 +4,20 @@ import html
 import math
 
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
 import streamlit as st
 
 
 ROOT = Path(__file__).resolve().parents[1]
-TFM_ROOT = ROOT.parent
 DEVSET_CONVERSATION_PATH = ROOT / "visualize_streamlit" / "devset_conversation_details.json"
 BM25_EXPLANATION_PATH = ROOT / "visualize_streamlit" / "bm25_explanation_table.csv"
 MINILM_EXPLANATION_PATH = ROOT / "visualize_streamlit" / "minilm_reference_retrieval_table.csv"
 MINILM_SCORES_PATH = ROOT / "exp" / "first_100" / "devset_gemini_multiquery_minilm_streamlit_top20" / "scores.json"
-SCORES_DIR = TFM_ROOT / "music-crs-evaluator" / "exp" / "scores" / "devset"
-PREDICTIONS_DIR = TFM_ROOT / "music-crs-evaluator" / "exp" / "inference" / "devset"
 
 REFERENCE_LINKS = {
     "RecSys Challenge 2026": "https://www.recsyschallenge.com/2026/",
     "Music-CRS Challenge": "https://nlp4musa.github.io/music-crs-challenge/",
     "talkpl-ai Hugging Face": "https://huggingface.co/talkpl-ai",
-    "Codabench": "https://www.codabench.org/competitions/15786/",
     "Baseline repository": "https://github.com/JiaHaoHuangXia/music-crs-baselines",
-}
-
-EXPERIMENT_NOTES = {
-    "random": "Lower bound. High catalog coverage but almost no retrieval accuracy.",
-    "popularity": "Lower bound. Recommends globally frequent tracks, so diversity is very low.",
-    "prediction": "Current devset BM25 baseline artifact in the evaluator folder.",
-    "llama1b_bm25_devset": "Llama 3.2 1B response generator with BM25 retrieval on devset.",
 }
 
 DEVSET_SUBSET_RESULTS = [
@@ -74,33 +61,7 @@ DEVSET_SUBSET_RESULTS = [
         "note": "BM25 baseline with tag_list added to the retrieval corpus. Tags improve top-20 recall but add noise.",
     },
     {
-        "experiment": "BM25 + Gemini controlled keywords, artist/title block x2",
-        "split": "Devset first 50 conversations",
-        "turns_evaluated": 400,
-        "ndcg@1": 0.0325,
-        "ndcg@10": 0.11414415511650364,
-        "ndcg@20": 0.14930209229441888,
-        "catalog_diversity": 0.05126298570244949,
-        "lexical_diversity": 0.5262852351157841,
-        "total_catalog_size": 47071,
-        "source": "Historical local evaluator",
-        "note": "Gemini extracts controlled lexical fields and repeats the keyword block to strengthen artist/title evidence.",
-    },
-    {
-        "experiment": "BM25 + Gemini controlled keywords + static query router",
-        "split": "Devset first 50 conversations",
-        "turns_evaluated": 400,
-        "ndcg@1": 0.0325,
-        "ndcg@10": 0.11541612893572054,
-        "ndcg@20": 0.15073852033934126,
-        "catalog_diversity": 0.054407172144207684,
-        "lexical_diversity": 0.0,
-        "total_catalog_size": 47071,
-        "source": "Historical local evaluator",
-        "note": "Manual query-type reranker that boosts title, artist, album, decade, and negative-intent matches.",
-    },
-    {
-        "experiment": "BM25 + Gemini controlled keywords + logistic reranker",
+        "experiment": "BM25 + Gemini controlled keywords + Logistic Regression reranker",
         "split": "Devset first 50 conversations",
         "turns_evaluated": 400,
         "ndcg@1": 0.0325,
@@ -110,7 +71,7 @@ DEVSET_SUBSET_RESULTS = [
         "lexical_diversity": 0.5275797855262313,
         "total_catalog_size": 47071,
         "source": "Latest local evaluator",
-        "note": "Current best local BM25 run. Gemini extracts controlled search terms; BM25 generates candidates; a logistic regression model learns the reranking weights.",
+        "note": "Current best local BM25 run. Gemini extracts controlled search terms; BM25 generates candidates; Logistic Regression reranks candidates using interpretable query-candidate features.",
     },
     {
         "experiment": "MiniLM + Gemini references + artist profile + decade",
@@ -289,25 +250,6 @@ def clean_text(value):
     )
 
 
-def tag_overlap(gemini_tags, catalog_tags):
-    gemini_set = {
-        tag.strip().lower()
-        for tag in str(gemini_tags).split(",")
-        if tag.strip()
-    }
-    catalog_set = {
-        tag.strip().lower()
-        for tag in str(catalog_tags).split(",")
-        if tag.strip()
-    }
-
-    if not gemini_set or not catalog_set:
-        return 0, ""
-
-    overlap = gemini_set.intersection(catalog_set)
-    return len(overlap), ", ".join(sorted(overlap))
-
-
 @st.cache_data
 def load_devset_conversations(path):
     if not path.exists():
@@ -334,6 +276,7 @@ def load_bm25_explanations(path):
         "track_name",
         "artist_name",
         "album_name",
+        "tag_list",
         "release_decade",
         "is_ground_truth",
         "route_types",
@@ -405,46 +348,6 @@ def load_score_json(path):
         return json.load(file)
 
 
-@st.cache_data
-def load_score_files(scores_dir):
-    rows = []
-    if not scores_dir.exists():
-        return pd.DataFrame()
-
-    for path in sorted(scores_dir.glob("*.json")):
-        with path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        experiment = path.stem
-        rows.append(
-            {
-                "experiment": experiment,
-                "ndcg@1": data.get("ndcg@1"),
-                "ndcg@10": data.get("ndcg@10"),
-                "ndcg@20": data.get("ndcg@20"),
-                "catalog_diversity": data.get("catalog_diversity"),
-                "lexical_diversity": data.get("lexical_diversity"),
-                "total_catalog_size": data.get("total_catalog_size"),
-                "note": EXPERIMENT_NOTES.get(experiment, ""),
-                "file": str(path),
-            }
-        )
-
-    return pd.DataFrame(rows)
-
-
-@st.cache_data
-def load_predictions(predictions_dir):
-    options = {}
-    if not predictions_dir.exists():
-        return options
-
-    for path in sorted(predictions_dir.glob("*.json")):
-        with path.open("r", encoding="utf-8") as f:
-            options[path.stem] = pd.DataFrame(json.load(f))
-    return options
-
-
 def format_metric(value, digits=4):
     if value is None or pd.isna(value):
         return "n/a"
@@ -461,8 +364,14 @@ def metric_grid(results):
     else:
         col1.metric("Models shown", len(results))
     col2.metric("Best nDCG@20", format_metric(best_ndcg["ndcg@20"]), best_ndcg["experiment"])
-    col3.metric("Best nDCG@10", format_metric(results["ndcg@10"].max()) if "ndcg@10" in results else "n/a")
-    col4.metric("Best catalog diversity", format_metric(results["catalog_diversity"].max()) if "catalog_diversity" in results else "n/a")
+    col3.metric(
+        "Best catalog diversity",
+        format_metric(results["catalog_diversity"].max()) if "catalog_diversity" in results else "n/a",
+    )
+    col4.metric(
+        "Best lexical diversity",
+        format_metric(results["lexical_diversity"].max()) if "lexical_diversity" in results else "n/a",
+    )
 
 
 def render_header(title, caption):
@@ -521,41 +430,42 @@ def render_project_overview():
         "track is not in the top 20. This is why the dashboard separates retrieval quality from response quality."
     )
 
-    st.markdown("#### Models Compared")
+    st.markdown("#### Final Models Kept In This Dashboard")
     model_rows = [
         {
-            "model": "BM25",
-            "idea": "Keyword matching over track metadata.",
-            "strength": "Good when the conversation shares exact words with track names, artists, albums, or tags.",
-            "risk": "Cannot understand paraphrases deeply.",
+            "model": "BM25 + Gemini keywords + Logistic Regression reranker",
+            "role": "Main retrieval model",
+            "how_it_works": (
+                "Gemini extracts controlled search terms from the conversation, BM25 retrieves candidate tracks "
+                "from catalog metadata, and Logistic Regression reranks the candidates with interpretable features."
+            ),
+            "why_kept": "Best local nDCG@20 and the most aligned with exact hidden-track retrieval.",
         },
         {
-            "model": "BM25 + tag_list",
-            "idea": "BM25 with user-generated/music metadata tags included in the searchable catalog text.",
-            "strength": "Best observed system because tags give strong lexical clues.",
-            "risk": "Still depends on exact vocabulary overlap.",
-        },
-        {
-            "model": "BERT",
-            "idea": "Dense embedding retrieval using text representations.",
-            "strength": "Can group semantically similar metadata.",
-            "risk": "Semantic neighbors are not always the exact hidden target track.",
-        },
-        {
-            "model": "Gemini expansion",
-            "idea": "Gemini generates reference songs/tags from the conversation to enrich the retrieval query.",
-            "strength": "Can improve interpretation and response-side quality.",
-            "risk": "Can cause query drift by suggesting plausible songs that point away from the target.",
+            "model": "MiniLM + Gemini references + artist profile + decade",
+            "role": "Embedding explanation model",
+            "how_it_works": (
+                "Gemini proposes reference tracks, and MiniLM retrieves nearby catalog tracks using enriched "
+                "metadata with track, artist, album, artist style profile, and release decade."
+            ),
+            "why_kept": "Useful for analyzing semantic retrieval behavior, even though it is weaker than BM25 for exact-track nDCG@20.",
         },
     ]
     st.dataframe(pd.DataFrame(model_rows), width="stretch", hide_index=True)
+
+    st.markdown("#### Main Finding")
+    st.write(
+        "The strongest retrieval strategy was not free-form generation or pure semantic embedding search. "
+        "The best result came from constraining Gemini to extract catalog-relevant keywords, using BM25 for "
+        "lexical candidate retrieval, and applying a lightweight Logistic Regression reranker to refine the top-20 list."
+    )
 
     st.markdown("#### How To Use This Dashboard")
     st.markdown(
         """
         - Start with **Model Results** to see which retrieval strategies worked best.
-        - Use **MiniLM Explanation** to inspect the embedding-based Gemini experiments and example turns with known ground truth.
-        - Use **BM25 Explanation** to see how the current BM25 + Gemini keyword model builds and matches its query.
+        - Use **BM25 Explanation** to inspect the final model: controlled Gemini terms, retrieved tracks, and matched metadata evidence.
+        - Use **MiniLM Explanation** to inspect the retained embedding model and compare its semantic retrieval behavior with BM25.
         """
     )
 
@@ -575,60 +485,26 @@ def render_model_results():
     )
     devset_df = pd.DataFrame(DEVSET_SUBSET_RESULTS)
     metric_grid(devset_df)
-    st.dataframe(devset_df, width="stretch", hide_index=True)
+    display_columns = [
+        "experiment",
+        "split",
+        "turns_evaluated",
+        "ndcg@20",
+        "catalog_diversity",
+        "lexical_diversity",
+        "note",
+    ]
+    st.dataframe(devset_df[display_columns], width="stretch", hide_index=True)
 
     st.markdown("#### Interpretation")
     st.markdown(
         """
         - For this challenge, the most important retrieval signal is nDCG@20: whether the exact target track appears in the top 20.
-        - The current best local BM25 system uses Gemini as a controlled lexical query extractor and learns the reranker weights with logistic regression.
+        - The current best local BM25 system uses Gemini as a controlled lexical query extractor and uses Logistic Regression to rerank BM25 candidates with interpretable query-candidate features.
         - Dense embedding variants retrieve semantically plausible neighborhoods, but they are weak for this evaluation because nDCG@20 rewards exact track recovery.
         - The embedding model is kept for analysis and explainability, while the learned BM25 reranker is the strongest nDCG@20 model in this branch.
         """
     )
-
-
-def render_prediction_explorer(prediction_options):
-    st.subheader("Prediction Explorer")
-    if not prediction_options:
-        st.warning("No prediction files were found.")
-        return
-
-    names = list(prediction_options.keys())
-    selected_name = st.selectbox("Prediction file", names)
-    df = prediction_options[selected_name].copy()
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Rows", len(df))
-    col2.metric("Sessions", df["session_id"].nunique() if "session_id" in df else "n/a")
-    col3.metric("Users", df["user_id"].nunique() if "user_id" in df else "n/a")
-    col4.metric("Max turn", int(df["turn_number"].max()) if "turn_number" in df else "n/a")
-
-    session_options = sorted(df["session_id"].dropna().unique())
-    selected_session = st.selectbox("Session", session_options)
-    session_df = df[df["session_id"] == selected_session].copy()
-
-    turns = sorted(session_df["turn_number"].dropna().unique())
-    selected_turn = st.selectbox("Turn", turns)
-    row = session_df[session_df["turn_number"] == selected_turn].iloc[0]
-
-    left, right = st.columns([1, 1.3])
-    with left:
-        st.markdown("#### Top 20 Track IDs")
-        tracks = pd.DataFrame(
-            {
-                "rank": range(1, len(row["predicted_track_ids"]) + 1),
-                "track_id": row["predicted_track_ids"],
-            }
-        )
-        st.dataframe(tracks, width="stretch", hide_index=True)
-
-    with right:
-        st.markdown("#### Generated Response")
-        st.write(clean_text(row.get("predicted_response", "")))
-
-    st.markdown("#### Raw Row")
-    st.json(row.to_dict())
 
 
 def render_devset_conversation(detail):
@@ -840,7 +716,7 @@ def build_top20_retrieval_summary(df, session_col="session_id", turn_col="turn_n
 def render_bm25_explanation(df, conversation_details):
     render_header(
         "BM25 Explanation",
-        "Inspect the lexical evidence behind BM25 retrieval and the query-type router.",
+        "Inspect the lexical evidence behind BM25 retrieval and the learned reranker.",
     )
     if df.empty:
         st.warning("BM25 explanation data was not found.")
@@ -856,55 +732,18 @@ def render_bm25_explanation(df, conversation_details):
         """
         **How to read this page.** BM25 is not an embedding model, so the useful visualization is not a 2D semantic map.
         This view explains the lexical matching process: Gemini extracts controlled search terms, BM25 retrieves
-        catalog tracks whose metadata contains those terms, and the query-type router only changes the order for
-        clear artist/title/album/decade/negative-intent cases.
+        catalog tracks whose metadata contains those terms, and the Logistic Regression reranker refines the order
+        using interpretable query-candidate features.
         """
     )
 
-    turn_count = df[["session_id", "turn_number"]].drop_duplicates().shape[0]
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Explanation rows", len(df))
-    col2.metric("Evaluated turns", turn_count)
-    col3.metric("Avg matched terms", format_metric(df["matched_term_count"].mean(), digits=2))
-    col4.metric("Ground-truth rows", int(df["is_ground_truth"].sum()))
-
     retrieval_summary, turn_metrics = build_top20_retrieval_summary(df)
     if retrieval_summary:
-        st.markdown("#### Retrieval Quality Summary")
-        st.caption(
-            "Overall performance for this exported devset run: whether the correct track appears in the top 20, "
-            "and how high it is ranked when it appears."
-        )
         metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
         metric_col1.metric("nDCG@20", f"{retrieval_summary['ndcg_at_20']:.4f}")
         metric_col2.metric("Hit rate@20", f"{retrieval_summary['hit_rate_at_20']:.1%}")
         metric_col3.metric("Target found", f"{retrieval_summary['found']}/{retrieval_summary['turns']}")
-        metric_col4.metric("Target missed", f"{retrieval_summary['missed']}")
-
-        rank_order = ["1", "2-5", "6-10", "11-20", "Not in top 20"]
-        rank_distribution = (
-            turn_metrics["rank_bucket"]
-            .value_counts()
-            .reindex(rank_order, fill_value=0)
-            .rename_axis("ground_truth_rank")
-            .reset_index(name="turns")
-        )
-        rank_distribution["share"] = rank_distribution["turns"] / retrieval_summary["turns"]
-        fig = px.bar(
-            rank_distribution,
-            x="ground_truth_rank",
-            y="turns",
-            text=rank_distribution["share"].map(lambda value: f"{value:.1%}"),
-            title="Ground-truth rank distribution",
-        )
-        fig.update_traces(marker_color="#2f80c4", textposition="outside")
-        fig.update_layout(
-            height=360,
-            xaxis_title="Where the correct track appeared",
-            yaxis_title="Conversation turns",
-            showlegend=False,
-        )
-        st.plotly_chart(fig, width="stretch")
+        metric_col4.metric("Avg matched terms", format_metric(df["matched_term_count"].mean(), digits=2))
 
     session_options = sorted(df["session_id"].dropna().unique())
     selected_session = st.sidebar.selectbox(
@@ -966,9 +805,11 @@ def render_bm25_explanation(df, conversation_details):
 
     st.markdown("#### Top-20 Retrieval Evidence")
     st.caption(
-        "The final ranked tracks for this turn. The match columns show which Gemini/BM25 terms were found in each "
-        "track's metadata, and the ground_truth column marks the correct answer when it appears."
+        "The final ranked tracks for this turn. The ground_truth column marks the correct answer when it appears."
     )
+    if "tag_list" not in turn_df.columns:
+        turn_df = turn_df.copy()
+        turn_df["tag_list"] = ""
     display_table = turn_df[
         [
             "rank",
@@ -976,9 +817,7 @@ def render_bm25_explanation(df, conversation_details):
             "artist_name",
             "album_name",
             "release_decade",
-            "matched_term_count",
-            "matched_fields",
-            "matched_terms",
+            "tag_list",
             "is_ground_truth",
         ]
     ].rename(
@@ -987,7 +826,7 @@ def render_bm25_explanation(df, conversation_details):
             "artist_name": "artist",
             "album_name": "album",
             "release_decade": "decade",
-            "matched_term_count": "matched_terms_n",
+            "tag_list": "tags",
             "is_ground_truth": "ground_truth",
         }
     )
@@ -1082,331 +921,6 @@ def render_bm25_explanation(df, conversation_details):
     st.dataframe(pd.DataFrame(field_summary), width="stretch", hide_index=True)
 
 
-def build_oracle_rows(ground_truth_df, retrieved_df, k_values):
-    if ground_truth_df.empty or retrieved_df.empty:
-        return pd.DataFrame()
-
-    retrieved = retrieved_df.copy()
-    retrieved["retrieved_rank_number"] = pd.to_numeric(
-        retrieved["retrieved_rank"],
-        errors="coerce",
-    )
-    ground_truth = ground_truth_df[
-        ["session_id", "turn_number_key", "track_id", "track_name", "artist_name"]
-    ].rename(
-        columns={
-            "track_id": "ground_truth_track_id",
-            "track_name": "ground_truth_track",
-            "artist_name": "ground_truth_artist",
-        }
-    )
-    joined = retrieved.merge(
-        ground_truth,
-        on=["session_id", "turn_number_key"],
-        how="inner",
-    )
-    joined["is_ground_truth_neighbor"] = (
-        joined["track_id"] == joined["ground_truth_track_id"]
-    )
-
-    rows = []
-    total_turns = ground_truth[["session_id", "turn_number_key"]].drop_duplicates().shape[0]
-    for k in k_values:
-        within_k = joined[joined["retrieved_rank_number"] <= k]
-        hit_turns = (
-            within_k[within_k["is_ground_truth_neighbor"]]
-            [["session_id", "turn_number_key"]]
-            .drop_duplicates()
-            .shape[0]
-        )
-        rows.append(
-            {
-                "k": k,
-                "hit_turns": hit_turns,
-                "miss_turns": total_turns - hit_turns,
-                "total_turns": total_turns,
-                "hit_rate": hit_turns / total_turns if total_turns else 0.0,
-            }
-        )
-
-    return pd.DataFrame(rows)
-
-
-def normalize_match_value(value):
-    return str(value or "").strip().lower()
-
-
-def build_miss_breakdown_rows(ground_truth_df, gemini_df, retrieved_df, k):
-    if ground_truth_df.empty or gemini_df.empty or retrieved_df.empty:
-        return pd.DataFrame()
-
-    retrieved = retrieved_df.copy()
-    retrieved["retrieved_rank_number"] = pd.to_numeric(
-        retrieved["retrieved_rank"],
-        errors="coerce",
-    )
-    retrieved = retrieved[retrieved["retrieved_rank_number"] <= k]
-
-    ground_truth = ground_truth_df[
-        ["session_id", "turn_number_key", "track_id", "track_name", "artist_name", "album_name"]
-    ].rename(
-        columns={
-            "track_id": "ground_truth_track_id",
-            "track_name": "ground_truth_track",
-            "artist_name": "ground_truth_artist",
-            "album_name": "ground_truth_album",
-        }
-    )
-    retrieved_with_truth = retrieved.merge(
-        ground_truth[["session_id", "turn_number_key", "ground_truth_track_id"]],
-        on=["session_id", "turn_number_key"],
-        how="inner",
-    )
-    found_turns = set(
-        retrieved_with_truth[retrieved_with_truth["track_id"] == retrieved_with_truth["ground_truth_track_id"]]
-        .apply(lambda row: (row["session_id"], row["turn_number_key"]), axis=1)
-        .tolist()
-    )
-
-    gemini = gemini_df[
-        ["session_id", "turn_number_key", "track_name", "artist_name", "album_name"]
-    ].rename(
-        columns={
-            "track_name": "gemini_track",
-            "artist_name": "gemini_artist",
-            "album_name": "gemini_album",
-        }
-    )
-    joined = ground_truth.merge(gemini, on=["session_id", "turn_number_key"], how="left")
-    joined["turn_key"] = list(zip(joined["session_id"], joined["turn_number_key"]))
-    misses = joined[~joined["turn_key"].isin(found_turns)].copy()
-
-    if misses.empty:
-        return pd.DataFrame()
-
-    misses["same_track_title"] = (
-        misses["ground_truth_track"].map(normalize_match_value)
-        == misses["gemini_track"].map(normalize_match_value)
-    )
-    misses["same_artist"] = (
-        misses["ground_truth_artist"].map(normalize_match_value)
-        == misses["gemini_artist"].map(normalize_match_value)
-    )
-    misses["same_album"] = (
-        misses["ground_truth_album"].map(normalize_match_value)
-        == misses["gemini_album"].map(normalize_match_value)
-    )
-
-    rows = []
-    for (_, _), group in misses.groupby(["session_id", "turn_number_key"]):
-        exact_title_and_artist = bool((group["same_track_title"] & group["same_artist"]).any())
-        same_artist_and_album = bool((group["same_artist"] & group["same_album"]).any())
-        same_artist = bool(group["same_artist"].any())
-        same_album = bool(group["same_album"].any())
-
-        if exact_title_and_artist:
-            category = "Gemini named the target, but retrieval still missed it"
-        elif same_artist_and_album:
-            category = "Same artist and album"
-        elif same_artist:
-            category = "Same artist only"
-        elif same_album:
-            category = "Same album only"
-        else:
-            category = "Different artist and album"
-
-        rows.append({"miss_reason": category})
-
-    order = [
-        "Gemini named the target, but retrieval still missed it",
-        "Same artist and album",
-        "Same artist only",
-        "Same album only",
-        "Different artist and album",
-    ]
-    breakdown = (
-        pd.DataFrame(rows)
-        .value_counts("miss_reason")
-        .rename("turns")
-        .reset_index()
-    )
-    breakdown["miss_reason"] = pd.Categorical(
-        breakdown["miss_reason"],
-        categories=order,
-        ordered=True,
-    )
-    breakdown = breakdown.sort_values("miss_reason")
-    breakdown["share_of_misses"] = breakdown["turns"] / breakdown["turns"].sum()
-    return breakdown
-
-
-def render_oracle_check(ground_truth_df, gemini_df, retrieved_df, selected_session, selected_turn):
-    st.markdown("#### Can Gemini's Reference Songs Find The Correct Track?")
-    st.markdown(
-        """
-        For each conversation turn, Gemini generated 5 reference songs. For each reference song, we retrieved
-        the closest catalog tracks. This diagnostic checks whether the true target track appeared anywhere in
-        those candidates. If it did not appear here, a later ranking or fusion step cannot recommend it.
-        """
-    )
-
-    if ground_truth_df.empty or retrieved_df.empty:
-        st.info("Oracle data is not available. Regenerate the embedding projection with retrieved-track highlights.")
-        return
-
-    max_rank = int(pd.to_numeric(retrieved_df["retrieved_rank"], errors="coerce").max())
-    candidate_k_values = [1, 5, 10, 20, 50, 100, 200]
-    k_values = [k for k in candidate_k_values if k <= max_rank]
-    if max_rank not in k_values:
-        k_values.append(max_rank)
-    k_values = sorted(set(k_values))
-
-    oracle_df = build_oracle_rows(ground_truth_df, retrieved_df, k_values)
-    if oracle_df.empty:
-        st.info("Oracle data could not be calculated from the current projection file.")
-        return
-
-    latest_k = int(oracle_df["k"].max())
-    latest_row = oracle_df[oracle_df["k"] == latest_k].iloc[0]
-    hit_turns = int(latest_row["hit_turns"])
-    total_turns = int(latest_row["total_turns"])
-    miss_turns = int(latest_row["miss_turns"])
-    hit_rate = float(latest_row["hit_rate"])
-    miss_rate = 1.0 - hit_rate
-
-    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
-    metric_col1.metric("Evaluated turns", f"{total_turns}")
-    metric_col2.metric("Target found", f"{hit_turns}")
-    metric_col3.metric("Target missed", f"{miss_turns}")
-    metric_col4.metric("Target reachable rate", f"{hit_rate:.1%}")
-
-    found_missed = pd.DataFrame(
-        [
-            {"result": "Found target", "turns": hit_turns, "share": hit_rate},
-            {"result": "Missed target", "turns": miss_turns, "share": miss_rate},
-        ]
-    )
-    fig = go.Figure()
-    for row in found_missed.itertuples(index=False):
-        color = "#2f9e67" if row.result == "Found target" else "#d9dee7"
-        fig.add_trace(
-            go.Bar(
-                y=["Gemini reference retrieval"],
-                x=[row.share],
-                name=row.result,
-                orientation="h",
-                marker=dict(color=color),
-                customdata=[[row.turns, row.share]],
-                text=[f"{row.result}: {row.share:.1%}"],
-                textposition="inside",
-                hovertemplate=(
-                    f"<b>{row.result}</b><br>"
-                    "Turns: %{customdata[0]}<br>"
-                    "Share: %{customdata[1]:.1%}<extra></extra>"
-                ),
-            )
-        )
-    fig.update_layout(
-        barmode="stack",
-        height=220,
-        xaxis_title=f"Share of turns after checking 5 x top {latest_k} nearest tracks",
-        yaxis_title="",
-        yaxis_tickformat=".0%",
-        xaxis=dict(range=[0, 1], tickformat=".0%"),
-        legend_title="Result",
-        margin=dict(l=10, r=10, t=20, b=40),
-    )
-    st.plotly_chart(fig, width="stretch")
-    st.caption(
-        f"Interpretation: with the current exported data, Gemini's 5 reference songs found the correct track "
-        f"for {hit_turns} of {total_turns} turns after checking the top {latest_k} nearest catalog matches "
-        "for each reference song. This is an upper-limit diagnostic, not the final recommender score."
-    )
-
-    st.markdown("##### Why Did The Missed Turns Fail?")
-    st.caption(
-        "This breakdown uses only the metadata fields used by the latest embedding model: track name, artist name, "
-        "and album name."
-    )
-    miss_breakdown = build_miss_breakdown_rows(ground_truth_df, gemini_df, retrieved_df, latest_k)
-    if miss_breakdown.empty:
-        st.info("There are no missed turns to break down in the current exported data.")
-    else:
-        st.dataframe(
-            miss_breakdown.assign(
-                share_of_misses=miss_breakdown["share_of_misses"].map(lambda value: f"{value:.1%}")
-            ),
-            width="stretch",
-            hide_index=True,
-        )
-
-    turn_ground_truth = ground_truth_df[
-        (ground_truth_df["session_id"] == selected_session)
-        & (ground_truth_df["turn_number_key"] == selected_turn)
-    ].copy()
-    turn_retrieved = retrieved_df[
-        (retrieved_df["session_id"] == selected_session)
-        & (retrieved_df["turn_number_key"] == selected_turn)
-    ].copy()
-
-    if turn_ground_truth.empty or turn_retrieved.empty:
-        return
-
-    gt_row = turn_ground_truth.iloc[0]
-    gt_track_id = gt_row["track_id"]
-    turn_retrieved["retrieved_rank_number"] = pd.to_numeric(
-        turn_retrieved["retrieved_rank"],
-        errors="coerce",
-    )
-    hits = turn_retrieved[turn_retrieved["track_id"] == gt_track_id].copy()
-
-    if hits.empty:
-        st.warning(
-            "For this selected turn, the ground-truth track does not appear in the exported nearest neighbors "
-            "of any Gemini reference."
-        )
-    else:
-        best_hit = hits.sort_values("retrieved_rank_number").iloc[0]
-        st.success(
-            "For this selected turn, Gemini can reach the ground-truth track: "
-            f"{gt_row['track_name']} by {gt_row['artist_name']} appears at nearest-neighbor rank "
-            f"{int(best_hit['retrieved_rank_number'])} from Gemini reference {best_hit['gemini_reference_rank_key']}."
-        )
-
-    reference_summary = (
-        turn_retrieved.assign(is_ground_truth=turn_retrieved["track_id"] == gt_track_id)
-        .groupby("gemini_reference_rank_key", as_index=False)
-        .agg(
-            best_ground_truth_rank=(
-                "retrieved_rank_number",
-                lambda values: int(values.min()) if len(values) else None,
-            ),
-            contains_ground_truth=("is_ground_truth", "max"),
-        )
-    )
-    reference_summary = reference_summary.rename(
-        columns={
-            "gemini_reference_rank_key": "gemini_reference",
-            "contains_ground_truth": "target_found",
-        }
-    )
-    if not hits.empty:
-        hit_rank_by_reference = hits.groupby("gemini_reference_rank_key")["retrieved_rank_number"].min()
-        reference_summary["best_ground_truth_rank"] = reference_summary["gemini_reference"].map(
-            hit_rank_by_reference
-        )
-    else:
-        reference_summary["best_ground_truth_rank"] = None
-    rank_values = pd.to_numeric(
-        reference_summary["best_ground_truth_rank"],
-        errors="coerce",
-    )
-    reference_summary["best_ground_truth_rank"] = (
-        rank_values.astype("Int64").astype(str).replace("<NA>", "not found")
-    )
-    st.dataframe(reference_summary, width="stretch", hide_index=True)
-
-
 def render_minilm_explanation(df, conversation_details, scores):
     render_header(
         "MiniLM Explanation",
@@ -1443,13 +957,13 @@ def render_minilm_explanation(df, conversation_details, scores):
     hit_rows = final_df[final_df["is_ground_truth"]]
     found_turns = hit_rows[["session_id", "turn_number"]].drop_duplicates()
     total_turns = ground_truth_df[["session_id", "turn_number"]].drop_duplicates()
-    missing_count = max(len(total_turns) - len(found_turns), 0)
+    turn_count = int(scores.get("subset_turns", len(total_turns)))
+    hit_rate = len(found_turns) / turn_count if turn_count else 0.0
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     col1.metric("nDCG@20", format_metric(scores.get("ndcg@20")))
-    col2.metric("Ground truth found", len(found_turns))
-    col3.metric("Missing from top 20", missing_count)
-    col4.metric("Turns evaluated", int(scores.get("subset_turns", len(total_turns))))
+    col2.metric("Hit rate@20", f"{hit_rate:.1%}")
+    col3.metric("Target found", f"{len(found_turns)}/{turn_count}")
 
     session_options = sorted(reference_df["session_id"].dropna().unique())
     if not session_options:
@@ -1461,11 +975,18 @@ def render_minilm_explanation(df, conversation_details, scores):
     turn_options = sorted([int(turn) for turn in session_turns])
     selected_turn = st.sidebar.selectbox("Turn", turn_options, key="minilm_turn")
 
-    key_filter = (df["session_id"] == selected_session) & (df["turn_number"] == selected_turn)
-    turn_final = final_df[key_filter].sort_values("rank_number").copy()
-    turn_ground_truth = ground_truth_df[key_filter].copy()
-    turn_references = reference_df[key_filter].sort_values("gemini_reference_rank_number").copy()
-    turn_retrieved = retrieved_df[key_filter].sort_values(
+    turn_final = final_df[
+        (final_df["session_id"] == selected_session) & (final_df["turn_number"] == selected_turn)
+    ].sort_values("rank_number").copy()
+    turn_ground_truth = ground_truth_df[
+        (ground_truth_df["session_id"] == selected_session) & (ground_truth_df["turn_number"] == selected_turn)
+    ].copy()
+    turn_references = reference_df[
+        (reference_df["session_id"] == selected_session) & (reference_df["turn_number"] == selected_turn)
+    ].sort_values("gemini_reference_rank_number").copy()
+    turn_retrieved = retrieved_df[
+        (retrieved_df["session_id"] == selected_session) & (retrieved_df["turn_number"] == selected_turn)
+    ].sort_values(
         ["gemini_reference_rank_number", "rank_number"]
     ).copy()
 
@@ -1489,7 +1010,7 @@ def render_minilm_explanation(df, conversation_details, scores):
         summary_rows.append(
             {
                 "type": "Gemini reference",
-                "rank": int(row.gemini_reference_rank_number),
+                "rank": str(int(row.gemini_reference_rank_number)),
                 "track": row.track_name,
                 "artist": row.artist_name,
                 "album": row.album_name,
@@ -1543,432 +1064,10 @@ def render_minilm_explanation(df, conversation_details, scores):
             st.dataframe(table, width="stretch", hide_index=True, height=min(420, 84 + 36 * len(table)))
 
 
-def render_embedding_map(df, conversation_details):
-    render_header(
-        "Devset Embedding Map",
-        "Place Gemini-generated reference tracks inside the catalog embedding space.",
-    )
-    if df.empty:
-        st.warning("This retired embedding-map view has no projection data.")
-        return
-
-    st.markdown(
-        """
-        **How to read this page.** The gray cloud is the real challenge catalog projected from retrieval embeddings
-        into two dimensions. The highlighted points show the selected turn's ground-truth track and the five
-        Gemini-generated reference tracks. If the Gemini points are far from the ground truth, that can indicate
-        query drift, but the actual retrieval decision is still made in the original embedding space.
-
-        PCA is the recommended view for thesis explanation because it is more stable and preserves broad global
-        structure. UMAP is available as an exploratory local-neighborhood view, but it can exaggerate or compress
-        distances in ways that are visually misleading.
-
-        The final top-20 recommendations, Gemini references, and embedding projection are loaded from exported
-        dashboard files. After running a new model, refresh those files with `refresh_streamlit_artifacts.py`
-        so this page describes the latest exported embedding run.
-        """
-    )
-
-    catalog_df = df[df["point_type"] == "catalog"].copy()
-    gemini_df = df[df["point_type"] == "gemini_reference"].copy()
-    ground_truth_df = df[df["point_type"] == "ground_truth"].copy()
-    retrieved_df = df[df["point_type"] == "retrieved_track"].copy()
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Catalog tracks", len(catalog_df))
-    col2.metric("Gemini references", len(gemini_df))
-    col3.metric("Ground-truth points", len(ground_truth_df))
-    col4.metric("Retrieved highlights", len(retrieved_df))
-
-    if gemini_df.empty:
-        st.info("No Gemini reference points are available in the projection CSV.")
-        return
-
-    projection_type = (
-        df["projection_retrieval_type"].dropna().astype(str).iloc[0]
-        if "projection_retrieval_type" in df.columns and not df["projection_retrieval_type"].dropna().empty
-        else "unknown"
-    )
-    projection_fields = (
-        df["projection_corpus_types"].dropna().astype(str).iloc[0]
-        if "projection_corpus_types" in df.columns and not df["projection_corpus_types"].dropna().empty
-        else "unknown"
-    )
-    projection_label = {
-        "bert": "BERT",
-        "sentence_transformer": "MiniLM sentence-transformer",
-    }.get(projection_type, projection_type)
-    available_projection_methods = []
-    if {"pca_x", "pca_y"}.issubset(df.columns):
-        available_projection_methods.append("pca")
-    if {"umap_x", "umap_y"}.issubset(df.columns):
-        available_projection_methods.append("umap")
-    if not available_projection_methods:
-        st.warning("The projection CSV does not contain usable 2D coordinates.")
-        return
-    default_projection_index = 0
-    projection_method = st.sidebar.selectbox(
-        "Map projection",
-        available_projection_methods,
-        index=default_projection_index,
-        format_func=lambda value: {
-            "pca": "PCA - stable thesis view",
-            "umap": "UMAP - exploratory local view",
-        }.get(value, value.upper()),
-        key="embedding_projection_method",
-    )
-    x_coord = f"{projection_method}_x"
-    y_coord = f"{projection_method}_y"
-    projection_method_label = projection_method.upper()
-    st.caption(
-        f"Projection: {projection_method_label} using {projection_label}. Corpus fields: {projection_fields}."
-    )
-
-    session_options = sorted(gemini_df["session_id"].dropna().unique())
-    selected_session = st.sidebar.selectbox(
-        "Session",
-        session_options,
-        key="embedding_session",
-    )
-    session_gemini = gemini_df[gemini_df["session_id"] == selected_session].copy()
-
-    turn_options = sorted(session_gemini["turn_number_key"].dropna().unique(), key=lambda value: int(value))
-    selected_turn = st.sidebar.selectbox(
-        "Turn",
-        turn_options,
-        key="embedding_turn",
-    )
-    turn_gemini = session_gemini[session_gemini["turn_number_key"] == selected_turn].copy()
-    turn_ground_truth = ground_truth_df[
-        (ground_truth_df["session_id"] == selected_session)
-        & (ground_truth_df["turn_number_key"] == selected_turn)
-    ].copy()
-    turn_retrieved = retrieved_df[
-        (retrieved_df["session_id"] == selected_session)
-        & (retrieved_df["turn_number_key"] == selected_turn)
-    ].copy()
-
-    turn_gemini = turn_gemini.sort_values("gemini_reference_rank_key").copy()
-    reference_label_by_rank = {
-        row.gemini_reference_rank_key: f"{row.gemini_reference_rank_key}. {row.track_name} - {row.artist_name}"
-        for row in turn_gemini.itertuples(index=False)
-    }
-    reference_options = ["All"] + list(reference_label_by_rank.values())
-    selected_reference = st.sidebar.selectbox(
-        "Gemini reference",
-        reference_options,
-        key="embedding_reference",
-    )
-    visible_retrieved = turn_retrieved
-    visible_gemini = turn_gemini
-    if selected_reference != "All":
-        selected_reference_rank = selected_reference.split(".", 1)[0]
-        visible_retrieved = turn_retrieved[
-            turn_retrieved["gemini_reference_rank_key"] == selected_reference_rank
-        ]
-        visible_gemini = turn_gemini[
-            turn_gemini["gemini_reference_rank_key"] == selected_reference_rank
-        ]
-
-    reference_colors = {
-        "1": "#c4462f",
-        "2": "#2f80c4",
-        "3": "#7b4fb3",
-        "4": "#2f9e67",
-        "5": "#d18a00",
-    }
-    if not turn_retrieved.empty:
-        turn_retrieved["gemini_reference_track"] = turn_retrieved["gemini_reference_rank_key"].map(
-            reference_label_by_rank
-        )
-    if not visible_retrieved.empty:
-        visible_retrieved["gemini_reference_track"] = visible_retrieved["gemini_reference_rank_key"].map(
-            reference_label_by_rank
-        )
-
-    render_oracle_check(ground_truth_df, gemini_df, retrieved_df, selected_session, selected_turn)
-
-    selected_detail = conversation_details.get((selected_session, int(selected_turn)))
-    final_recommendations = []
-    if selected_detail is not None:
-        catalog_by_track_id = catalog_df.set_index("track_id")
-        for rank, track in enumerate(selected_detail.get("predicted_tracks", []), start=1):
-            track_id = track.get("track_id")
-            if track_id not in catalog_by_track_id.index:
-                continue
-            catalog_row = catalog_by_track_id.loc[track_id]
-            final_recommendations.append(
-                {
-                    "rank": rank,
-                    "track_id": track_id,
-                    "track_name": track.get("track_name", catalog_row["track_name"]),
-                    "artist_name": track.get("artist_name", catalog_row["artist_name"]),
-                    "album_name": track.get("album_name", catalog_row["album_name"]),
-                    "tag_list": catalog_row["tag_list"],
-                    x_coord: catalog_row[x_coord],
-                    y_coord: catalog_row[y_coord],
-                }
-            )
-    final_recommendations_df = pd.DataFrame(final_recommendations)
-
-    genre_options = ["All"] + sorted(catalog_df["broad_genre"].dropna().unique())
-    selected_genre = st.sidebar.selectbox(
-        "Catalog background",
-        genre_options,
-        key="embedding_genre",
-    )
-    visible_catalog = catalog_df
-    if selected_genre != "All":
-        visible_catalog = catalog_df[catalog_df["broad_genre"] == selected_genre]
-
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=visible_catalog[x_coord],
-            y=visible_catalog[y_coord],
-            mode="markers",
-            name="Catalog tracks",
-            marker=dict(size=3, color="#c7cbd1", opacity=0.16),
-            text=visible_catalog["track_name"] + " - " + visible_catalog["artist_name"],
-            customdata=visible_catalog[["album_name", "broad_genre"]],
-            hovertemplate=(
-                "<b>%{text}</b><br>"
-                "Album: %{customdata[0]}<br>"
-                "Genre group: %{customdata[1]}<extra></extra>"
-            ),
-        )
-    )
-
-    if not final_recommendations_df.empty:
-        fig.add_trace(
-            go.Scatter(
-                x=final_recommendations_df[x_coord],
-                y=final_recommendations_df[y_coord],
-                mode="markers+text",
-                name="Final top-20 recommendations",
-                marker=dict(
-                    size=12,
-                    color="#111827",
-                    symbol="square",
-                    line=dict(width=1, color="#ffffff"),
-                    opacity=0.9,
-                ),
-                text=final_recommendations_df["rank"].astype(str),
-                textposition="bottom center",
-                customdata=final_recommendations_df[
-                    ["rank", "track_name", "artist_name", "album_name"]
-                ],
-                hovertemplate=(
-                    "<b>Final recommendation #%{customdata[0]}</b><br>"
-                    "%{customdata[1]} - %{customdata[2]}<br>"
-                    "Album: %{customdata[3]}<extra></extra>"
-                ),
-            )
-        )
-
-    for reference_rank, reference_gemini in visible_gemini.groupby("gemini_reference_rank_key"):
-        color = reference_colors.get(str(reference_rank), "#c4462f")
-        reference_label = reference_label_by_rank.get(str(reference_rank), f"Gemini reference {reference_rank}")
-        reference_retrieved = visible_retrieved[
-            visible_retrieved["gemini_reference_rank_key"] == str(reference_rank)
-        ]
-
-        if not reference_retrieved.empty:
-            fig.add_trace(
-                go.Scatter(
-                    x=reference_retrieved[x_coord],
-                    y=reference_retrieved[y_coord],
-                    mode="markers",
-                    name=f"Retrieved from {reference_label}",
-                    marker=dict(
-                        size=10,
-                        color=color,
-                        symbol="circle-open",
-                        line=dict(width=2),
-                    ),
-                    customdata=reference_retrieved[
-                        [
-                            "track_name",
-                            "artist_name",
-                            "album_name",
-                            "gemini_reference_track",
-                            "retrieved_rank_key",
-                            "cosine_similarity",
-                        ]
-                    ],
-                    hovertemplate=(
-                        "<b>%{customdata[0]} - %{customdata[1]}</b><br>"
-                        "Album: %{customdata[2]}<br>"
-                        "From Gemini: %{customdata[3]}<br>"
-                        "Retrieved rank for that Gemini track: %{customdata[4]}<br>"
-                        "Cosine similarity: %{customdata[5]:.4f}<extra></extra>"
-                    ),
-                )
-            )
-
-        fig.add_trace(
-            go.Scatter(
-                x=reference_gemini[x_coord],
-                y=reference_gemini[y_coord],
-                mode="markers+text",
-                name=reference_label,
-                marker=dict(size=16, color=color, symbol="diamond", line=dict(width=1, color="#ffffff")),
-                text=reference_gemini["gemini_reference_rank_key"],
-                textposition="top center",
-                customdata=reference_gemini[["track_name", "artist_name", "album_name"]],
-                hovertemplate=(
-                    "<b>Gemini reference %{text}</b><br>"
-                    "%{customdata[0]} - %{customdata[1]}<br>"
-                    "Album: %{customdata[2]}<extra></extra>"
-                ),
-            )
-        )
-
-    if not turn_ground_truth.empty:
-        fig.add_trace(
-            go.Scatter(
-                x=turn_ground_truth[x_coord],
-                y=turn_ground_truth[y_coord],
-                mode="markers",
-                name="Ground-truth track",
-                marker=dict(size=20, color="#2364aa", symbol="star", line=dict(width=2, color="#ffffff")),
-                text=turn_ground_truth["track_name"] + " - " + turn_ground_truth["artist_name"],
-                customdata=turn_ground_truth[["album_name"]],
-                hovertemplate=(
-                    "<b>%{text}</b><br>"
-                    "Album: %{customdata[0]}<extra></extra>"
-                ),
-            )
-        )
-
-    fig.update_layout(
-        title=f"{projection_method_label} map of {projection_label} metadata embeddings",
-        height=660,
-        xaxis_title=f"{projection_method_label} dimension 1",
-        yaxis_title=f"{projection_method_label} dimension 2",
-        legend_title="Gemini source",
-    )
-    st.plotly_chart(fig, width="stretch")
-
-    st.markdown("#### Highlighted Points")
-    summary_rows = []
-    if not turn_ground_truth.empty:
-        for row in turn_ground_truth.itertuples(index=False):
-            summary_rows.append(
-                {
-                    "type": "Ground truth",
-                    "rank": "",
-                    "track": row.track_name,
-                    "artist": row.artist_name,
-                    "album": row.album_name,
-                    "tags": row.tag_list,
-                }
-            )
-
-    for row in turn_gemini.sort_values("gemini_reference_rank_key").itertuples(index=False):
-        summary_rows.append(
-            {
-                "type": "Gemini reference",
-                "rank": row.gemini_reference_rank_key,
-                "track": row.track_name,
-                "artist": row.artist_name,
-                "album": row.album_name,
-                "tags": row.tag_list,
-            }
-        )
-
-    st.dataframe(pd.DataFrame(summary_rows), width="stretch", hide_index=True)
-
-    st.markdown("#### Final Top-20 Recommendations")
-    st.caption(
-        f"These are the final model recommendations for the selected turn, projected onto the same {projection_method_label} map."
-    )
-    if final_recommendations_df.empty:
-        st.info("No final recommendation details are available for this selected turn.")
-    else:
-        final_table = final_recommendations_df[
-            ["rank", "track_name", "artist_name", "album_name", "tag_list"]
-        ].rename(
-            columns={
-                "track_name": "track",
-                "artist_name": "artist",
-                "album_name": "album",
-                "tag_list": "tags",
-            }
-        )
-        st.dataframe(final_table, width="stretch", hide_index=True, height=360)
-
-    st.markdown(f"#### {projection_label} Nearest Tracks For Each Gemini Reference")
-    st.caption(
-        "Each table shows the catalog tracks retrieved from one Gemini-generated reference song before fusion."
-    )
-    if visible_retrieved.empty:
-        st.info(
-            "No retrieved-track highlights are available. Regenerate the projection CSV with the updated script."
-        )
-    else:
-        target_track_id = None
-        if not turn_ground_truth.empty:
-            target_track_id = turn_ground_truth.iloc[0]["track_id"]
-
-        for reference_rank, reference_rows in visible_retrieved.groupby("gemini_reference_rank_key"):
-            reference_rows = reference_rows.copy()
-            reference_rows["_retrieved_rank_sort"] = pd.to_numeric(
-                reference_rows["retrieved_rank_key"],
-                errors="coerce",
-            )
-            reference_rows = reference_rows.sort_values("_retrieved_rank_sort")
-            reference_label = reference_label_by_rank.get(
-                str(reference_rank),
-                f"{reference_rank}. Gemini reference",
-            )
-            found_rows = reference_rows[reference_rows["track_id"] == target_track_id]
-            if target_track_id is not None and not found_rows.empty:
-                found_rank = int(found_rows["_retrieved_rank_sort"].min())
-                status = f"target found at rank {found_rank}"
-            else:
-                status = "target not found"
-
-            with st.expander(f"{reference_label} - {status}", expanded=(selected_reference != "All")):
-                table = reference_rows[
-                    [
-                        "retrieved_rank_key",
-                        "cosine_similarity",
-                        "track_name",
-                        "artist_name",
-                        "album_name",
-                        "tag_list",
-                    ]
-                ].rename(
-                    columns={
-                        "retrieved_rank_key": "retrieved_rank",
-                        "track_name": "track",
-                        "artist_name": "artist",
-                        "album_name": "album",
-                        "tag_list": "tags",
-                    }
-                )
-                st.dataframe(
-                    table,
-                    width="stretch",
-                    hide_index=True,
-                    height=min(420, 84 + 36 * len(table)),
-                )
-
-
 def render_references():
     st.subheader("Challenge References")
     for label, url in REFERENCE_LINKS.items():
         st.markdown(f"- [{label}]({url})")
-
-    st.markdown("#### Current Working Hypothesis")
-    st.markdown(
-        """
-        The strongest path for the TFM demo is to show that exact lexical signals matter strongly in this dataset:
-        BM25 benefits from tag and metadata overlap, while dense semantic expansion can produce musically plausible
-        but evaluation-wrong recommendations. Gemini should therefore be used as a restrained tag extractor for BM25.
-        """
-    )
 
 
 def set_active_page(page):
@@ -2027,7 +1126,7 @@ def main():
         elif page == "MiniLM Explanation":
             st.caption("Inspect MiniLM references, final recommendations, and per-reference retrieval tables.")
         elif page == "BM25 Explanation":
-            st.caption("Inspect controlled BM25 query terms, matches, and router evidence.")
+            st.caption("Inspect controlled BM25 query terms, matches, and reranker evidence.")
 
     if page == "Project Overview":
         render_project_overview()
