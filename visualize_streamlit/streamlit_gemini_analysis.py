@@ -959,9 +959,11 @@ def render_minilm_explanation(df, conversation_details, scores):
     total_turns = ground_truth_df[["session_id", "turn_number"]].drop_duplicates()
     turn_count = int(scores.get("subset_turns", len(total_turns)))
     hit_rate = len(found_turns) / turn_count if turn_count else 0.0
+    retrieval_summary, _ = build_top20_retrieval_summary(final_df)
+    ndcg_at_20 = scores.get("ndcg@20", retrieval_summary.get("ndcg_at_20"))
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("nDCG@20", format_metric(scores.get("ndcg@20")))
+    col1.metric("nDCG@20", format_metric(ndcg_at_20))
     col2.metric("Hit rate@20", f"{hit_rate:.1%}")
     col3.metric("Target found", f"{len(found_turns)}/{turn_count}")
 
