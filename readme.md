@@ -72,14 +72,6 @@ The output is written to:
 exp/first_100/devset_bm25_gemini_keywords_learned_query_type_weights/
 ```
 
-### Run BM25 + Gemini Keywords Without Reranking
-
-This is useful as an ablation of the final Logistic Regression reranker.
-
-```powershell
-python run_inference_evaluate_first100.py --tid devset_bm25_gemini_keywords_no_rerank --num_rows 50 --batch_size 1 --device cuda --gemini_cache_dir ./cache/gemini_keywords_devset_first100 --output_dir exp/first_100
-```
-
 ### Recreate the Logistic Regression Reranker Weights
 
 ```powershell
