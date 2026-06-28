@@ -8,6 +8,108 @@ This repository provides standardized tools to evaluate music recommendation sys
 - **Challenge Website**: [https://nlp4musa.github.io/music-crs-challenge/](https://nlp4musa.github.io/music-crs-challenge/)
 - **Challenge datasets**: [talkpl-ai/talkplay-data-challenge](https://huggingface.co/collections/talkpl-ai/talkplay-data-challenge)
 
+## Project Reproducibility Guide
+
+This fork contains the final thesis model and the Streamlit dashboard used to inspect the experiments. The retained final approach is:
+
+1. Gemini extracts controlled search keywords from the conversation.
+2. BM25 retrieves candidate tracks from catalog metadata.
+3. A Logistic Regression reranker learns how to adjust the final candidate order using interpretable query-candidate features.
+
+The main local evaluation subset used in the thesis is the first 50 devset conversations, corresponding to 400 evaluated turns.
+
+### Main Files
+
+| Purpose | File |
+|---|---|
+| Final devset model | `config/devset_bm25_gemini_keywords_learned_query_type_weights.yaml` |
+| Final blindset B model | `config/blindset_B_bm25_gemini_keywords_learned_query_type_weights.yaml` |
+| Logistic Regression weights | `models/query_type_logistic_weights.json` |
+| Reranker training script | `train_query_type_weight_model.py` |
+| Devset first-50 evaluator | `run_inference_evaluate_first100.py` |
+| Streamlit dashboard | `visualize_streamlit/streamlit_gemini_analysis.py` |
+| BM25 dashboard exporter | `refresh_streamlit_artifacts.py` |
+| MiniLM dashboard exporter | `export_minilm_explanation_to_csv.py` |
+
+### Run the Final Devset Model
+
+This evaluates the final BM25 + Gemini controlled keywords + Logistic Regression reranker on the first 50 devset conversations.
+
+```powershell
+python run_inference_evaluate_first100.py --tid devset_bm25_gemini_keywords_learned_query_type_weights --num_rows 50 --batch_size 1 --device cuda --gemini_cache_dir ./cache/gemini_keywords_devset_first100 --output_dir exp/first_100
+```
+
+The output is written to:
+
+```text
+exp/first_100/devset_bm25_gemini_keywords_learned_query_type_weights/
+```
+
+### Run BM25 + Gemini Keywords Without Reranking
+
+This is useful as an ablation of the final Logistic Regression reranker.
+
+```powershell
+python run_inference_evaluate_first100.py --tid devset_bm25_gemini_keywords_no_rerank --num_rows 50 --batch_size 1 --device cuda --gemini_cache_dir ./cache/gemini_keywords_devset_first100 --output_dir exp/first_100
+```
+
+### Recreate the Logistic Regression Reranker Weights
+
+```powershell
+python train_query_type_weight_model.py --tid devset_bm25_gemini_keywords_query_type_router --num_rows 50 --candidate_topk 100 --device cpu --gemini_cache_dir ./cache/gemini_keywords_devset_first100 --output ./models/query_type_logistic_weights.json
+```
+
+The learned weights are stored in:
+
+```text
+models/query_type_logistic_weights.json
+```
+
+### Run Blindset B Submission
+
+```powershell
+python run_inference_blindset.py --tid blindset_B_bm25_gemini_keywords_learned_query_type_weights --eval_dataset blindset_B --batch_size 1
+```
+
+The prediction file is written to:
+
+```text
+exp/inference/blindset_B/blindset_B_bm25_gemini_keywords_learned_query_type_weights.json
+```
+
+### Refresh Streamlit BM25 Artifacts
+
+Run this after evaluating the final devset model.
+
+```powershell
+python refresh_streamlit_artifacts.py --run_dir exp/first_100/devset_bm25_gemini_keywords_learned_query_type_weights --gemini_cache_dir cache/gemini_keywords_devset_first100 --bm25_keyword_cache_dir cache/gemini_keywords_devset_first100 --skip_embedding_projection
+```
+
+This updates:
+
+```text
+visualize_streamlit/devset_conversation_details.json
+visualize_streamlit/bm25_explanation_table.csv
+```
+
+### Generate the MiniLM Explanation Table
+
+The Streamlit dashboard also includes a retained MiniLM explanation page. Generate its table with:
+
+```powershell
+python export_minilm_explanation_to_csv.py --run_dir exp/first_100/devset_gemini_multiquery_minilm_streamlit_top20 --gemini_cache_dir cache/gemini_expansions_devset_first100 --output_csv visualize_streamlit/minilm_reference_retrieval_table.csv --topk_retrieved_per_reference 20 --corpus_types track_name artist_name album_name artist_style_profile release_decade --device cuda
+```
+
+### Launch the Streamlit Dashboard
+
+```powershell
+streamlit run visualize_streamlit/streamlit_gemini_analysis.py
+```
+
+The dashboard compares retained models, explains the BM25 keyword/reranking pipeline, and shows the MiniLM retrieval examples used for analysis.
+
+---
+
 ## Timeline
 
 | Date | Milestone |
