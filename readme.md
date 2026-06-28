@@ -23,7 +23,6 @@ The main local evaluation subset used in the thesis is the first 50 devset conve
 | Purpose | File |
 |---|---|
 | Final devset model | `config/devset_bm25_gemini_keywords_learned_query_type_weights.yaml` |
-| Final blindset B model | `config/blindset_B_bm25_gemini_keywords_learned_query_type_weights.yaml` |
 | Logistic Regression weights | `models/query_type_logistic_weights.json` |
 | Reranker training script | `train_query_type_weight_model.py` |
 | Devset first-50 evaluator | `run_inference_evaluate_first100.py` |
