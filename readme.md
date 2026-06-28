@@ -18,6 +18,34 @@ This fork contains the final thesis model and the Streamlit dashboard used to in
 
 The main local evaluation subset used in the thesis is the first 50 devset conversations, corresponding to 400 evaluated turns.
 
+### Additional Setup for This Fork
+
+Install the project dependencies after creating and activating a Python environment:
+
+```powershell
+pip install -e .
+```
+
+The scripts download datasets and models from Hugging Face, so log in if access is required:
+
+```powershell
+huggingface-cli login
+```
+
+The Gemini keyword extraction models require a Google Gemini API key:
+
+```powershell
+$env:GOOGLE_API_KEY="your_api_key_here"
+```
+
+The local first-50 devset evaluator imports metric functions from the official evaluator repository. Clone it next to this repository, so both folders share the same parent directory:
+
+```powershell
+cd ..
+git clone https://github.com/nlp4musa/music-crs-evaluator.git
+cd music-crs-baselines
+```
+
 ### Main Files
 
 | Purpose | File |

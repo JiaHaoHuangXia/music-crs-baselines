@@ -24,11 +24,19 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 EVALUATOR_ROOT = PROJECT_ROOT.parent / "music-crs-evaluator"
 sys.path.insert(0, str(EVALUATOR_ROOT))
 
-from metrics import (  # noqa: E402
-    compute_catalog_diversity,
-    compute_lexical_diversity,
-    compute_recsys_metrics,
-)
+try:
+    from metrics import (  # noqa: E402
+        compute_catalog_diversity,
+        compute_lexical_diversity,
+        compute_recsys_metrics,
+    )
+except ModuleNotFoundError as exc:
+    raise ModuleNotFoundError(
+        "Could not import the Music-CRS evaluator metrics. Clone the evaluator "
+        f"repository next to this project so this path exists: {EVALUATOR_ROOT}\n"
+        "Example: git clone https://github.com/nlp4musa/music-crs-evaluator.git "
+        f"{EVALUATOR_ROOT}"
+    ) from exc
 
 
 DATASET_NAME = "talkpl-ai/TalkPlayData-Challenge-Dataset"
