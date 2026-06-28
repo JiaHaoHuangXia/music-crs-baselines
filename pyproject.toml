@@ -33,5 +33,9 @@ dependencies = [
     "umap-learn>=0.5.7",
 ]
 
-[tool.setuptools]
-packages = ["mcrs"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mcrs*"]
+
+[tool.setuptools.package-data]
+"mcrs" = ["system_prompts/*.txt"]
